@@ -43,6 +43,27 @@ tests/
 
 ---
 
+## Data format and timeframe
+
+To run the tests (or to supply your own input that matches the golden baselines), use data in this form:
+
+| Requirement | Details |
+|--------------|---------|
+| **Timeframe** | **15-minute (15M) bars.** The suite and all baselines are built from 15M OHLCV. Other timeframes will not match the committed result CSVs unless you regenerate baselines. |
+| **Required columns** | `Date`, `Open`, `High`, `Low`, `Close`, `Volume` |
+| **Optional columns** | `Tickvol`, `Spread` |
+| **Date** | Parsable as datetime (e.g. `YYYY.MM.DD HH:MM:SS`). The test code sets `Date` as the index with `pd.to_datetime`. |
+| **File** | CSV; default input is `tests/test_data/EURUSD/EURUSD_15M.csv`. |
+
+Example header and row:
+
+```text
+Date,Open,High,Low,Close,Tickvol,Volume,Spread
+2022.10.10 00:00:00,0.97312,0.97369,0.97312,0.97357,60,0,20
+```
+
+---
+
 ## How tests work
 
 1. **Setup**
