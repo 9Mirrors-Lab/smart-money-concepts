@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SMC indicator GIF viewer</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0c0e12;
+      color: #e6e6e6;
+      margin: 0;
+      padding: 1.5rem;
+      min-height: 100vh;
+    }
+    h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1rem 0; }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+    .controls label { display: flex; align-items: center; gap: 0.5rem; }
+    .controls input[type="range"] { width: 140px; accent-color: #77dd76; }
+    .speed-value { min-width: 3rem; font-variant-numeric: tabular-nums; }
+    .wrap {
+      display: inline-block;
+      background: #1a1d24;
+      border-radius: 8px;
+      padding: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    #c {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+    .error { color: #ff6962; margin-top: 0.5rem; }
+    .hint { color: #888; font-size: 0.875rem; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>SMC indicator GIF viewer</h1>
+  <div class="controls">
+    <label>
+      <span>Speed</span>
+      <input type="range" id="speed" min="25" max="400" value="100" step="25">
+      <span class="speed-value" id="speedVal">1.00×</span>
+    </label>
+    <label>
+      <span>GIF</span>
+      <select id="gifSelect">
+        <option value="test_kcex.gif">test_kcex.gif</option>
+        <option value="test.gif">test.gif</option>
+      </select>
+    </label>
+    <button type="button" id="loadBtn">Load</button>
+  </div>
+  <div class="wrap">
+    <canvas id="c" width="500" height="300"></canvas>
+  </div>
+  <p id="msg" class="hint">Click Load to start. Speed: &lt;1× slower, &gt;1× faster. Serve this folder (e.g. <code>python -m http.server 8080</code> in tests/) to avoid CORS.</p>
+  <p id="err" class="error"></p>
+
+  <script type="module">
+    import { parseGIF, decompressFrames } from 'https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/+esm';
+
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    const speedInput = document.getElementById('speed');
+    const speedVal = document.getElementById('speedVal');
+    const gifSelect = document.getElementById('gifSelect');
+    const loadBtn = document.getElementById('loadBtn');
+    const msg = document.getElementById('msg');
+    const err = document.getElementById('err');
+
+    let speed = 1;
+    let timeoutId = null;
+    const DISPOSAL_BACKGROUND = 2;
+
+    let frames = null;
+    let gifWidth = 0;
+    let gifHeight = 0;
+    let offCanvas = null;
+    let offCtx = null;
+
+    function getSpeed() {
+      return Number(speedInput.value) / 100;
+    }
+
+    function setSpeedLabel() {
+      speed = getSpeed();
+      speedVal.textContent = speed.toFixed(2) + '×';
+    }
+
+    function stopAnimation() {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    }
+
+    function drawFrame(index) {
+      if (!frames || !frames.length || !offCtx) return;
+      const i = index % frames.length;
+      const f = frames[i];
+      const prev = i > 0 ? frames[i - 1] : null;
+      if (prev && prev.disposalType === DISPOSAL_BACKGROUND) {
+        offCtx.clearRect(prev.dims.left, prev.dims.top, prev.dims.width, prev.dims.height);
+      }
+      const imageData = new ImageData(
+        new Uint8ClampedArray(f.patch),
+        f.dims.width,
+        f.dims.height
+      );
+      offCtx.putImageData(imageData, f.dims.left, f.dims.top);
+      ctx.drawImage(offCanvas, 0, 0);
+    }
+
+    function loop(index) {
+      if (!frames || !frames.length) return;
+      drawFrame(index);
+      const f = frames[index];
+      const delay = Math.max(10, (f.delay || 100) / speed);
+      timeoutId = setTimeout(() => loop((index + 1) % frames.length), delay);
+    }
+
+    async function loadAndPlay() {
+      const url = gifSelect.value;
+      err.textContent = '';
+      msg.textContent = 'Loading…';
+      stopAnimation();
+
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(resp.statusText);
+        const buffer = await resp.arrayBuffer();
+        const gif = parseGIF(buffer);
+        frames = decompressFrames(gif, true);
+        gifWidth = gif.lsd.width;
+        gifHeight = gif.lsd.height;
+
+        canvas.width = gifWidth;
+        canvas.height = gifHeight;
+        offCanvas = document.createElement('canvas');
+        offCanvas.width = gifWidth;
+        offCanvas.height = gifHeight;
+        offCtx = offCanvas.getContext('2d');
+        setSpeedLabel();
+        msg.textContent = frames.length + ' frames · Speed: ' + speed.toFixed(2) + '×';
+        loop(0);
+      } catch (e) {
+        err.textContent = 'Failed to load GIF: ' + (e.message || e);
+        msg.textContent = 'Serve this folder (e.g. python -m http.server 8080) and open http://localhost:8080/gif_viewer.html';
+      }
+    }
+
+    speedInput.addEventListener('input', () => {
+      setSpeedLabel();
+      if (frames) {
+        stopAnimation();
+        loop(0);
+      }
+    });
+
+    loadBtn.addEventListener('click', () => loadAndPlay());
+    setSpeedLabel();
+  </script>
+</body>
+</html>

@@ -1,17 +1,38 @@
+import argparse
+import os
+import sys
+
+import imageio
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import sys
-import os
-from binance.client import Client
-from datetime import datetime
-import numpy as np
-import time
-import imageio
 from io import BytesIO
 from PIL import Image
 
-sys.path.append(os.path.abspath("../"))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from smartmoneyconcepts.smc import smc
+
+# Default CSV: KCEX ETHUSDT 23m in project root
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+DEFAULT_CSV = os.path.join(PROJECT_ROOT, "KCEX_ETHUSDT.P, 23_ce49b.csv")
+
+
+def load_csv_data(csv_path: str) -> pd.DataFrame:
+    """Load OHLCV CSV (time=Unix seconds, open/high/low/close/Volume); return DataFrame ready for smc."""
+    df = pd.read_csv(csv_path)
+    df = df.rename(columns={c: c.lower() for c in df.columns})
+    if "time" not in df.columns:
+        raise ValueError("CSV must have a 'time' column (Unix seconds)")
+    ohlcv = ["open", "high", "low", "close", "volume"]
+    for col in ohlcv:
+        if col not in df.columns:
+            raise ValueError(f"CSV must have column '{col}'")
+    df = df[["time"] + ohlcv].copy()
+    df = df.set_index("time")
+    df.index = pd.to_datetime(df.index, unit="s")
+    df = df.sort_index()
+    return df
 
 def add_FVG(fig, df, fvg_data):
     for i in range(len(fvg_data["FVG"])):
@@ -421,27 +442,66 @@ def add_retracements(fig, df, retracements):
 
 
 # get the data
-def import_data(symbol, start_str, timeframe):
-    client = Client()
-    start_str = str(start_str)
-    end_str = f"{datetime.now()}"
-    df = pd.DataFrame(
-        client.get_historical_klines(
-            symbol=symbol, interval=timeframe, start_str=start_str, end_str=end_str
-        )
-    ).astype(float)
-    df = df.iloc[:, :6]
-    df.columns = ["timestamp", "open", "high", "low", "close", "volume"]
-    df = df.set_index("timestamp")
-    df.index = pd.to_datetime(df.index, unit="ms").strftime("%Y-%m-%d %H:%M:%S")
-    return df
+parser = argparse.ArgumentParser(description="Generate SMC indicator GIF from OHLCV CSV.")
+parser.add_argument(
+    "csv",
+    nargs="?",
+    default=DEFAULT_CSV,
+    help=f"Path to CSV (default: {DEFAULT_CSV})",
+)
+parser.add_argument(
+    "--last",
+    type=int,
+    default=500,
+    help="Use last N bars for the animation (default: 500)",
+)
+parser.add_argument(
+    "--window",
+    type=int,
+    default=100,
+    help="Sliding window size in bars (default: 100)",
+)
+parser.add_argument(
+    "--out",
+    default="test.gif",
+    help="Output GIF filename (default: test.gif)",
+)
+parser.add_argument(
+    "--width",
+    type=int,
+    default=500,
+    help="Chart width in pixels (default: 500)",
+)
+parser.add_argument(
+    "--height",
+    type=int,
+    default=300,
+    help="Chart height in pixels (default: 300)",
+)
+parser.add_argument(
+    "--scale",
+    type=float,
+    default=1.0,
+    help="Resolution scale (e.g. 2 = 2x pixel density; default: 1)",
+)
+parser.add_argument(
+    "--export-plotly",
+    metavar="FILE",
+    default=None,
+    help="Export the first frame as a Plotly JSON file (e.g. chart.json) for opening in Plotly Chart Studio",
+)
+args = parser.parse_args()
 
+if not os.path.isfile(args.csv):
+    sys.exit(f"CSV not found: {args.csv}")
 
-df = import_data("BTCUSDT", "2024-04-01", "15m")
-df = df.iloc[-500:]
+df = load_csv_data(args.csv)
+df = df.iloc[-args.last :]
+if len(df) < args.window:
+    sys.exit(f"Need at least {args.window} bars; got {len(df)}")
 
 def fig_to_buffer(fig):
-    fig_bytes = fig.to_image(format="png")
+    fig_bytes = fig.to_image(format="png", scale=args.scale)
     fig_buffer = BytesIO(fig_bytes)
     fig_image = Image.open(fig_buffer)
     return np.array(fig_image)
@@ -449,9 +509,8 @@ def fig_to_buffer(fig):
 
 gif = []
 
-window = 100
-for pos in range(window, len(df)):
-    window_df = df.iloc[pos - window : pos]
+for pos in range(args.window, len(df)):
+    window_df = df.iloc[pos - args.window : pos]
 
     fig = go.Figure(
         data=[
@@ -486,17 +545,39 @@ for pos in range(window, len(df)):
 
     fig.update_layout(xaxis_rangeslider_visible=False)
     fig.update_layout(showlegend=False)
-    fig.update_layout(margin=dict(l=0, r=0, b=0, t=0))
-    fig.update_xaxes(visible=False, showticklabels=False)
-    fig.update_yaxes(visible=False, showticklabels=False)
+    fig.update_layout(margin=dict(l=10, r=70, b=50, t=10))
+    fig.update_xaxes(
+        visible=True,
+        showticklabels=True,
+        tickformat="%m/%d\n%H:%M",
+        tickfont=dict(color="rgba(255,255,255,0.8)", size=10),
+        gridcolor="rgba(255,255,255,0.1)",
+        side="bottom",
+    )
+    fig.update_yaxes(
+        visible=True,
+        showticklabels=True,
+        tickfont=dict(color="rgba(255,255,255,0.8)", size=10),
+        gridcolor="rgba(255,255,255,0.1)",
+        side="right",
+        title_text="Price",
+        title_font=dict(color="rgba(255,255,255,0.8)", size=10),
+    )
     fig.update_layout(plot_bgcolor="rgba(0,0,0,0)")
     fig.update_layout(paper_bgcolor="rgba(12, 14, 18, 1)")
     fig.update_layout(font=dict(color="white"))
 
-    # reduce the size of the image
-    fig.update_layout(width=500, height=300)
+    fig.update_layout(width=args.width, height=args.height)
+
+    if args.export_plotly and pos == args.window:
+        out_path = os.path.join(SCRIPT_DIR, args.export_plotly) if not os.path.isabs(args.export_plotly) else args.export_plotly
+        with open(out_path, "w") as f:
+            f.write(fig.to_json())
+        print(f"Exported Plotly figure to {out_path}")
 
     gif.append(fig_to_buffer(fig))
 
 # save the gif
-imageio.mimsave("test.gif", gif, duration=1)
+out_path = os.path.join(SCRIPT_DIR, args.out) if not os.path.isabs(args.out) else args.out
+imageio.mimsave(out_path, gif, duration=1)
+print(f"Saved {out_path} ({len(gif)} frames)")

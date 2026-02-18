@@ -803,7 +803,7 @@ class smc:
         This method returns wwhich candles are within the session specified
 
         parameters:
-        session: str - the session you want to check (Sydney, Tokyo, London, New York, Asian kill zone, London open kill zone, New York kill zone, london close kill zone, Custom)
+        session: str - the session you want to check (Asia, London, NYAM, NYPM, Custom)
         start_time: str - the start time of the session in the format "HH:MM" only required for custom session.
         end_time: str - the end time of the session in the format "HH:MM" only required for custom session.
         time_zone: str - the time zone of the candles can be in the format "UTC+0" or "GMT+0"
@@ -818,38 +818,29 @@ class smc:
             raise ValueError("Custom session requires a start and end time")
 
         default_sessions = {
-            "Sydney": {
-                "start": "21:00",
-                "end": "06:00",
-            },
-            "Tokyo": {
-                "start": "00:00",
-                "end": "09:00",
+            "Asia": {
+                "start": "01:00",
+                "end": "07:00",
             },
             "London": {
                 "start": "07:00",
-                "end": "16:00",
+                "end": "13:00",
             },
-            "New York": {
+            "NYAM": {
                 "start": "13:00",
-                "end": "22:00",
+                "end": "19:00",
             },
-            "Asian kill zone": {
-                "start": "00:00",
-                "end": "04:00",
+            "NYPM": {
+                "start": "19:00",
+                "end": "01:00",
             },
-            "London open kill zone": {
-                "start": "6:00",
-                "end": "9:00",
-            },
-            "New York kill zone": {
-                "start": "11:00",
-                "end": "14:00",
-            },
-            "london close kill zone": {
-                "start": "14:00",
-                "end": "16:00",
-            },
+            # "Sydney": {"start": "21:00", "end": "06:00"},
+            # "Tokyo": {"start": "00:00", "end": "09:00"},
+            # "New York": {"start": "13:00", "end": "22:00"},
+            # "Asian kill zone": {"start": "00:00", "end": "04:00"},
+            # "London open kill zone": {"start": "6:00", "end": "9:00"},
+            # "New York kill zone": {"start": "11:00", "end": "14:00"},
+            # "london close kill zone": {"start": "14:00", "end": "16:00"},
             "Custom": {
                 "start": start_time,
                 "end": end_time,
@@ -933,9 +924,13 @@ class smc:
                 direction[i] = direction[i - 1] if i > 0 else 0
 
             if direction[i - 1] == 1:
-                current_retracement[i] = round(
-                    100 - (((ohlc["low"].iloc[i] - bottom) / (top - bottom)) * 100), 1
-                )
+                denom = top - bottom
+                if denom != 0:
+                    current_retracement[i] = round(
+                        100 - (((ohlc["low"].iloc[i] - bottom) / denom) * 100), 1
+                    )
+                else:
+                    current_retracement[i] = 0.0
                 deepest_retracement[i] = max(
                     (
                         deepest_retracement[i - 1]
@@ -945,9 +940,13 @@ class smc:
                     current_retracement[i],
                 )
             if direction[i] == -1:
-                current_retracement[i] = round(
-                    100 - ((ohlc["high"].iloc[i] - top) / (bottom - top)) * 100, 1
-                )
+                denom = bottom - top
+                if denom != 0:
+                    current_retracement[i] = round(
+                        100 - ((ohlc["high"].iloc[i] - top) / denom) * 100, 1
+                    )
+                else:
+                    current_retracement[i] = 0.0
                 deepest_retracement[i] = max(
                     (
                         deepest_retracement[i - 1]

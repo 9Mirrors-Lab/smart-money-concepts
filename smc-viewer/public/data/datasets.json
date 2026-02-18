@@ -1,0 +1,8 @@
+[
+  {"id": "23m-live", "path": "smc_frames.json", "label": "KCEX ETH 23m (live)", "url": "/api/smc-frames?symbol=KCEX_ETHUSDT.P&timeframe=23"},
+  {"id": "90m-live", "path": "smc_frames.json", "label": "KCEX ETH 90m (live)", "url": "/api/smc-frames?symbol=KCEX_ETHUSDT.P&timeframe=90"},
+  {"id": "360-live", "path": "smc_frames.json", "label": "KCEX ETH 360 (live)", "url": "/api/smc-frames?symbol=KCEX_ETHUSDT.P&timeframe=360"},
+  {"id": "1d-live", "path": "smc_frames_1d.json", "label": "KCEX ETH 1D (live)", "url": "/api/smc-frames?symbol=KCEX_ETHUSDT.P&timeframe=1D"},
+  {"id": "1w-live", "path": "smc_frames_1w.json", "label": "KCEX ETH 1W (live)", "url": "/api/smc-frames?symbol=KCEX_ETHUSDT.P&timeframe=1W"},
+  {"id": "1m-live", "path": "smc_frames_1m.json", "label": "KCEX ETH 1M (live)", "url": "/api/smc-frames?symbol=KCEX_ETHUSDT.P&timeframe=1M"}
+]

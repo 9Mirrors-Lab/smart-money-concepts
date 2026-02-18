@@ -172,6 +172,13 @@ Direction = 1 if bullish retracement, -1 if bearish retracement<br>
 CurrentRetracement% = the current retracement percentage from the swing high or low<br>
 DeepestRetracement% = the deepest retracement percentage from the swing high or low<br>
 
+## Interactive SMC Animation Viewer
+
+An interactive browser-based viewer (Next.js + Plotly.js) lets you play through SMC indicator frames, scrub the timeline, toggle indicators, and jump to events (BOS, CHoCH, FVG, liquidity sweep, OB). Time is shown in 12-hour AM/PM Eastern.
+
+- **Run the viewer**: From the repo, `cd smc-viewer && npm install && npm run dev`, then open [http://localhost:3000/smc-viewer](http://localhost:3000/smc-viewer).
+- **Generate frame data**: From the repo root, `python scripts/export_smc_frames.py <your.csv> --out smc-viewer/public/data/smc_frames.json` (see `smc-viewer/README.md` for options).
+
 ## Hide Credit Message
 
 ```bash
