@@ -1,7 +1,10 @@
 /**
  * Engine 2 interpretive layer. Consumes alignment scores + wave context;
  * returns a Market Interpretation Object. Read-only; no UI, no Engine 2 changes.
+ * Optional overrides allow runtime tuning (e.g. from engine2-tune page).
  */
+
+import { getConfig, type Engine2LogicConfig, type Engine2LogicOverrides } from "./engine2-logic-config";
 
 export type AlignmentState =
   | "STRONG"
@@ -65,12 +68,11 @@ export interface ScoresAndWaveInput {
 
 const KEY_FACTORS_ALIGNED = "Multi-timeframe stack aligned";
 const KEY_FACTORS_MISALIGNED = "Higher timeframe misalignment";
-const STACK_THRESHOLD_ALIGNED = 0.6;
 
-function alignmentState(alignmentScore: number): AlignmentState {
-  if (alignmentScore >= 0.75) return "STRONG";
-  if (alignmentScore >= 0.55) return "MODERATE";
-  if (alignmentScore >= 0.35) return "WEAK";
+function alignmentState(alignmentScore: number, c: Engine2LogicConfig): AlignmentState {
+  if (alignmentScore >= c.alignment_strong) return "STRONG";
+  if (alignmentScore >= c.alignment_moderate) return "MODERATE";
+  if (alignmentScore >= c.alignment_weak) return "WEAK";
   return "DISALIGNED";
 }
 
@@ -79,20 +81,21 @@ function dominantBias(
   wave5ExhProb: number | null,
   waveNumber: "3" | "4" | "5" | "NONE" | null,
   momentumStrength: number | null,
-  divergenceScore: number | null
+  divergenceScore: number | null,
+  c: Engine2LogicConfig
 ): DominantBias {
   const divRisk = divergenceScore != null ? 1 - divergenceScore : 1;
   if (
-    (wave3Prob ?? 0) >= 0.6 &&
+    (wave3Prob ?? 0) >= c.bias_cont_wave3 &&
     waveNumber === "3" &&
-    (momentumStrength ?? 0) >= 0.55
+    (momentumStrength ?? 0) >= c.bias_cont_momentum
   ) {
     return "CONTINUATION";
   }
   if (
-    (wave5ExhProb ?? 0) >= 0.6 &&
+    (wave5ExhProb ?? 0) >= c.bias_exh_wave5 &&
     waveNumber === "5" &&
-    divRisk >= 0.5
+    divRisk >= c.bias_exh_div_risk
   ) {
     return "EXHAUSTION";
   }
@@ -101,15 +104,16 @@ function dominantBias(
 
 function confidenceLevel(
   multiTfStack: number | null,
-  alignmentScore: number | null
+  alignmentScore: number | null,
+  c: Engine2LogicConfig
 ): ConfidenceLevel {
   if (
-    (multiTfStack ?? 0) >= 0.7 &&
-    (alignmentScore ?? 0) >= 0.65
+    (multiTfStack ?? 0) >= c.conf_high_stack &&
+    (alignmentScore ?? 0) >= c.conf_high_align
   ) {
     return "HIGH";
   }
-  if ((multiTfStack ?? 0) >= 0.4) return "MEDIUM";
+  if ((multiTfStack ?? 0) >= c.conf_medium_stack) return "MEDIUM";
   return "LOW";
 }
 
@@ -127,7 +131,8 @@ function buildKeyFactors(
   input: ScoresAndWaveInput,
   alignment: AlignmentState,
   bias: DominantBias,
-  confidence: ConfidenceLevel
+  confidence: ConfidenceLevel,
+  c: Engine2LogicConfig
 ): string[] {
   const waveNum = normalizeWaveNumber(input.wave_number);
   const wave3Prob = toNum(input.wave3_probability);
@@ -140,30 +145,30 @@ function buildKeyFactors(
 
   const candidates: { label: (typeof ALLOWED_FACTORS)[number]; score: number }[] = [];
 
-  if ((wave3Prob ?? 0) >= 0.6 && waveNum === "3") {
+  if ((wave3Prob ?? 0) >= c.bias_cont_wave3 && waveNum === "3") {
     candidates.push({ label: "Wave 3 impulse confirmed", score: wave3Prob ?? 0 });
   }
-  if ((wave5ExhProb ?? 0) >= 0.6 && waveNum === "5") {
+  if ((wave5ExhProb ?? 0) >= c.bias_exh_wave5 && waveNum === "5") {
     candidates.push({ label: "Wave 5 extension detected", score: wave5ExhProb ?? 0 });
   }
-  if ((stack ?? 0) >= STACK_THRESHOLD_ALIGNED) {
+  if ((stack ?? 0) >= c.stack_aligned) {
     candidates.push({ label: KEY_FACTORS_ALIGNED, score: stack ?? 0 });
   }
   const stackVal = stack ?? 0;
-  if (stackVal < STACK_THRESHOLD_ALIGNED && 1 - stackVal >= 0.6) {
+  if (stackVal < c.stack_aligned && 1 - stackVal >= c.key_factor_misalign) {
     candidates.push({ label: KEY_FACTORS_MISALIGNED, score: 1 - stackVal });
   }
-  if ((momentum ?? 0) >= 0.6) {
+  if ((momentum ?? 0) >= c.key_factor_momentum) {
     candidates.push({ label: "Momentum expanding", score: momentum ?? 0 });
   }
-  if ((vol ?? 0) >= 0.6) {
+  if ((vol ?? 0) >= c.key_factor_vol) {
     candidates.push({ label: "Volatility contracting", score: vol ?? 0 });
   }
-  if (divRisk >= 0.6) {
+  if (divRisk >= c.key_factor_div_risk) {
     candidates.push({ label: "Divergence forming", score: divRisk });
   }
 
-  const filtered = candidates.filter((c) => c.score >= 0.6);
+  const filtered = candidates.filter((x) => x.score >= c.key_factor_relevance);
   const seen = new Set<string>();
   const out: string[] = [];
   for (const c of filtered) {
@@ -179,20 +184,21 @@ function buildKeyFactors(
 function buildWarnings(
   input: ScoresAndWaveInput,
   alignment: AlignmentState,
-  confidence: ConfidenceLevel
+  confidence: ConfidenceLevel,
+  c: Engine2LogicConfig
 ): string[] {
   const waveNum = normalizeWaveNumber(input.wave_number);
   const divHealth = toNum(input.divergence_score);
   const vol = toNum(input.volatility_regime_score);
   const out: string[] = [];
 
-  if ((divHealth ?? 1) <= 0.4) {
+  if ((divHealth ?? 1) <= c.warn_divergence_max) {
     out.push("Divergence increasing against price highs");
   }
   if (alignment === "STRONG" && confidence === "LOW") {
     out.push("Lower timeframe strength lacks higher timeframe confirmation");
   }
-  if (waveNum === "5" && (vol ?? 1) < 0.4) {
+  if (waveNum === "5" && (vol ?? 1) < c.warn_vol_wave5_min) {
     out.push("Volatility contraction during Wave 5");
   }
   return out;
@@ -227,27 +233,31 @@ function buildNarrative(
 /**
  * Derive a Market Interpretation from one row of scores + wave context.
  * Does not modify Engine 2 data; read-only.
+ * Optional overrides (e.g. from tune page) replace default thresholds.
  */
-export function interpret(input: ScoresAndWaveInput): MarketInterpretation {
+export function interpret(input: ScoresAndWaveInput, overrides?: Engine2LogicOverrides | null): MarketInterpretation {
+  const c = getConfig(overrides ?? undefined);
   const alignmentScore = toNum(input.alignment_score) ?? 0;
-  const alignment = alignmentState(alignmentScore);
+  const alignment = alignmentState(alignmentScore, c);
   const waveNum = normalizeWaveNumber(input.wave_number);
   const bias = dominantBias(
     toNum(input.wave3_probability),
     toNum(input.wave5_exhaustion_probability),
     waveNum,
     toNum(input.momentum_strength_score),
-    toNum(input.divergence_score)
+    toNum(input.divergence_score),
+    c
   );
   const confidence = confidenceLevel(
     toNum(input.multi_tf_stack_score),
-    toNum(input.alignment_score)
+    toNum(input.alignment_score),
+    c
   );
 
   const narrative_summary = buildNarrative(alignment, bias, waveNum);
-  const key_factors = buildKeyFactors(input, alignment, bias, confidence);
-  const warnings = buildWarnings(input, alignment, confidence);
-  const stack_aligned = (toNum(input.multi_tf_stack_score) ?? 0) >= STACK_THRESHOLD_ALIGNED;
+  const key_factors = buildKeyFactors(input, alignment, bias, confidence, c);
+  const warnings = buildWarnings(input, alignment, confidence, c);
+  const stack_aligned = (toNum(input.multi_tf_stack_score) ?? 0) >= c.stack_aligned;
 
   return {
     alignment_state: alignment,
@@ -287,9 +297,10 @@ export interface BarBreakdown {
  * Same as interpret() but also returns raw scores and which rules fired / blocked.
  * Used by diagnostics panel and API.
  */
-export function getBarBreakdown(input: ScoresAndWaveInput): BarBreakdown {
+export function getBarBreakdown(input: ScoresAndWaveInput, overrides?: Engine2LogicOverrides | null): BarBreakdown {
+  const c = getConfig(overrides ?? undefined);
   const alignmentScore = toNum(input.alignment_score) ?? 0;
-  const alignment = alignmentState(alignmentScore);
+  const alignment = alignmentState(alignmentScore, c);
   const waveNum = normalizeWaveNumber(input.wave_number);
   const wave3Prob = toNum(input.wave3_probability);
   const wave5ExhProb = toNum(input.wave5_exhaustion_probability);
@@ -304,9 +315,10 @@ export function getBarBreakdown(input: ScoresAndWaveInput): BarBreakdown {
     wave5ExhProb,
     waveNum,
     momentum,
-    divHealth
+    divHealth,
+    c
   );
-  const confidence = confidenceLevel(stack, alignmentScore);
+  const confidence = confidenceLevel(stack, alignmentScore, c);
 
   const rawScores: BarBreakdownRawScores = {
     alignment_score: toNum(input.alignment_score),
@@ -320,55 +332,55 @@ export function getBarBreakdown(input: ScoresAndWaveInput): BarBreakdown {
   };
 
   const rulesFired: string[] = [];
-  if (alignmentScore >= 0.75) rulesFired.push("alignment_score ≥ 0.75 → STRONG");
-  else if (alignmentScore >= 0.55) rulesFired.push("alignment_score ≥ 0.55 → MODERATE");
-  else if (alignmentScore >= 0.35) rulesFired.push("alignment_score ≥ 0.35 → WEAK");
-  else rulesFired.push("alignment_score < 0.35 → DISALIGNED");
+  if (alignmentScore >= c.alignment_strong) rulesFired.push(`alignment_score ≥ ${c.alignment_strong} → STRONG`);
+  else if (alignmentScore >= c.alignment_moderate) rulesFired.push(`alignment_score ≥ ${c.alignment_moderate} → MODERATE`);
+  else if (alignmentScore >= c.alignment_weak) rulesFired.push(`alignment_score ≥ ${c.alignment_weak} → WEAK`);
+  else rulesFired.push(`alignment_score < ${c.alignment_weak} → DISALIGNED`);
 
-  if ((stack ?? 0) >= 0.7 && (alignmentScore ?? 0) >= 0.65)
-    rulesFired.push("multi_tf_stack ≥ 0.7 and alignment_score ≥ 0.65 → HIGH confidence");
-  else if ((stack ?? 0) >= 0.4) rulesFired.push("multi_tf_stack_score ≥ 0.4 → MEDIUM confidence");
-  else rulesFired.push("multi_tf_stack_score < 0.4 → LOW confidence");
+  if ((stack ?? 0) >= c.conf_high_stack && (alignmentScore ?? 0) >= c.conf_high_align)
+    rulesFired.push(`multi_tf_stack ≥ ${c.conf_high_stack} and alignment_score ≥ ${c.conf_high_align} → HIGH confidence`);
+  else if ((stack ?? 0) >= c.conf_medium_stack) rulesFired.push(`multi_tf_stack_score ≥ ${c.conf_medium_stack} → MEDIUM confidence`);
+  else rulesFired.push(`multi_tf_stack_score < ${c.conf_medium_stack} → LOW confidence`);
 
-  if ((stack ?? 0) >= STACK_THRESHOLD_ALIGNED)
-    rulesFired.push(`multi_tf_stack_score ≥ ${STACK_THRESHOLD_ALIGNED} → stack_aligned`);
+  if ((stack ?? 0) >= c.stack_aligned)
+    rulesFired.push(`multi_tf_stack_score ≥ ${c.stack_aligned} → stack_aligned`);
 
   if (
-    (wave3Prob ?? 0) >= 0.6 &&
+    (wave3Prob ?? 0) >= c.bias_cont_wave3 &&
     waveNum === "3" &&
-    (momentum ?? 0) >= 0.55
+    (momentum ?? 0) >= c.bias_cont_momentum
   )
-    rulesFired.push("wave3_prob ≥ 0.6, wave_number=3, momentum ≥ 0.55 → CONTINUATION");
+    rulesFired.push(`wave3_prob ≥ ${c.bias_cont_wave3}, wave_number=3, momentum ≥ ${c.bias_cont_momentum} → CONTINUATION`);
   else if (
-    (wave5ExhProb ?? 0) >= 0.6 &&
+    (wave5ExhProb ?? 0) >= c.bias_exh_wave5 &&
     waveNum === "5" &&
-    divRisk >= 0.5
+    divRisk >= c.bias_exh_div_risk
   )
-    rulesFired.push("wave5_exhaustion ≥ 0.6, wave_number=5, div_risk ≥ 0.5 → EXHAUSTION");
+    rulesFired.push(`wave5_exhaustion ≥ ${c.bias_exh_wave5}, wave_number=5, div_risk ≥ ${c.bias_exh_div_risk} → EXHAUSTION`);
   else rulesFired.push("CONTINUATION/EXHAUSTION conditions not met → NEUTRAL");
 
   const rulesBlocked: string[] = [];
   if (alignment !== "STRONG") {
-    if (alignmentScore < 0.75)
-      rulesBlocked.push("STRONG alignment blocked by alignment_score < 0.75");
+    if (alignmentScore < c.alignment_strong)
+      rulesBlocked.push(`STRONG alignment blocked by alignment_score < ${c.alignment_strong}`);
   }
   if (confidence !== "HIGH") {
-    if ((stack ?? 0) < 0.7)
-      rulesBlocked.push("HIGH confidence blocked by multi_tf_stack_score < 0.7");
-    if ((alignmentScore ?? 0) < 0.65)
-      rulesBlocked.push("HIGH confidence blocked by alignment_score < 0.65");
+    if ((stack ?? 0) < c.conf_high_stack)
+      rulesBlocked.push(`HIGH confidence blocked by multi_tf_stack_score < ${c.conf_high_stack}`);
+    if ((alignmentScore ?? 0) < c.conf_high_align)
+      rulesBlocked.push(`HIGH confidence blocked by alignment_score < ${c.conf_high_align}`);
   }
   if (confidence === "LOW") {
-    if ((stack ?? 0) < 0.4)
-      rulesBlocked.push("MEDIUM confidence blocked by multi_tf_stack_score < 0.4");
+    if ((stack ?? 0) < c.conf_medium_stack)
+      rulesBlocked.push(`MEDIUM confidence blocked by multi_tf_stack_score < ${c.conf_medium_stack}`);
   }
   if (bias !== "CONTINUATION") {
-    if ((wave3Prob ?? 0) < 0.6)
-      rulesBlocked.push("CONTINUATION blocked by wave3_probability < 0.6");
+    if ((wave3Prob ?? 0) < c.bias_cont_wave3)
+      rulesBlocked.push(`CONTINUATION blocked by wave3_probability < ${c.bias_cont_wave3}`);
     if (waveNum !== "3")
       rulesBlocked.push("CONTINUATION blocked by wave_number ≠ 3");
-    if ((momentum ?? 0) < 0.55)
-      rulesBlocked.push("CONTINUATION blocked by momentum_strength_score < 0.55");
+    if ((momentum ?? 0) < c.bias_cont_momentum)
+      rulesBlocked.push(`CONTINUATION blocked by momentum_strength_score < ${c.bias_cont_momentum}`);
   }
 
   return {

@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { DiagnosticsApiResult } from "@/components/diagnostics-panel";
+import { getConfig, type Engine2LogicConfig } from "@/lib/engine2-logic-config";
+import { getActiveOverrides, getActiveOverridesQueryFragment } from "@/lib/engine2-version-store";
 import { Lock, Ban, ChevronDown, ChevronRight } from "lucide-react";
 
 const ALIGNMENT_ORDER = ["WEAK", "DISALIGNED", "MODERATE", "STRONG"] as const;
@@ -28,6 +30,12 @@ const BIAS_SHORT: Record<string, string> = { NEUTRAL: "N", CONTINUATION: "C", EX
 function getTotalBars(d: DiagnosticsApiResult["distribution"]): number {
   const counts = Object.values(d.alignment_state).map((x) => x.count);
   return Math.max(0, ...counts) || 0;
+}
+
+/** Low stack band pct (key is "< X" from active config). */
+function getStackLowPct(d: DiagnosticsApiResult): number {
+  const entry = Object.entries(d.multiTfStackBands).find(([k]) => k.startsWith("<"));
+  return entry?.[1]?.pct ?? 0;
 }
 
 function getDominant(
@@ -73,7 +81,7 @@ function getSuggested(d: DiagnosticsApiResult, timeframe: string): string {
   const strongPct = align.STRONG?.pct ?? 0;
   const highPct = conf.HIGH?.pct ?? 0;
   const neutralPct = bias.NEUTRAL?.pct ?? 0;
-  const stackLow = d.multiTfStackBands["< 0.4"]?.pct ?? 0;
+  const stackLow = getStackLowPct(d);
   if (weakPct >= 70 && lowPct >= 90) return "Confirmatory TF, not signal generator.";
   if (strongPct === 0 && highPct === 0 && stackLow >= 90) return "Stronger states need higher-TF participation.";
   if (weakPct >= 50 || lowPct >= 50) return "WEAK/LOW baseline; deviations meaningful.";
@@ -89,14 +97,17 @@ function formatWhyBlocked(d: DiagnosticsApiResult): { strong: string[]; high: st
   return { strong, high, cont };
 }
 
-/** Grid 2: Get single blocker pct by label match or first. */
+/** Grid 2: Get single blocker pct; labels use active config thresholds. */
 function getGatingPcts(d: DiagnosticsApiResult): { strong: number; high: number; med: number; cont: number } {
-  const findPct = (list: { label: string; pct: number }[], match: string) =>
-    list.find((x) => x.label.toLowerCase().includes(match))?.pct ?? list[0]?.pct ?? 0;
+  const stackEntries = d.gatingAnalysis.highConfidence.filter((x) => x.label.includes("multi_tf_stack"));
+  const withNum = stackEntries.map((x) => ({ ...x, num: parseFloat(x.label.replace(/^.*<\s*/, "")) || 0 }));
+  withNum.sort((a, b) => b.num - a.num);
+  const high = withNum[0]?.pct ?? d.gatingAnalysis.highConfidence[0]?.pct ?? 0;
+  const med = withNum[1]?.pct ?? withNum[0]?.pct ?? d.gatingAnalysis.highConfidence[1]?.pct ?? 0;
   return {
     strong: d.gatingAnalysis.strongAlignment[0]?.pct ?? 0,
-    high: findPct(d.gatingAnalysis.highConfidence, "0.7"),
-    med: findPct(d.gatingAnalysis.highConfidence, "0.4"),
+    high,
+    med,
     cont: d.gatingAnalysis.continuationBias[0]?.pct ?? 0,
   };
 }
@@ -212,6 +223,51 @@ function buildGridMarkdown(
     const { role, description } = d ? getRole(d, tf) : TF_ROLES[tf] ?? { role: "—", description: "—" };
     lines.push(`| ${tf} | ${role} | ${description} |`);
   }
+  lines.push("");
+
+  lines.push("## Per-Timeframe Role Classification Details (Current Bar Breakdown)");
+  lines.push("");
+  for (const tf of tfList) {
+    const d = data(tf);
+    if (!d) {
+      lines.push(`### ${tf}`);
+      lines.push("");
+      lines.push(`Error or no data: ${(rows[tf] as { error: string })?.error ?? "—"}`);
+      lines.push("");
+      continue;
+    }
+    const { role, description } = getRole(d, tf);
+    const summaryLines = buildSummaryLines(d, tf);
+    const { strong: whyStrong, high: whyHigh, cont: whyCont } = formatWhyBlocked(d);
+    const suggested = getSuggested(d, tf);
+
+    lines.push(`### ${tf} — ${role}`);
+    lines.push("");
+    lines.push(description);
+    lines.push("");
+    lines.push("**Behavior summary:**");
+    for (const line of summaryLines) {
+      lines.push(`- ${line}`);
+    }
+    lines.push("");
+    if (whyStrong.length > 0) {
+      lines.push(`**Why STR blocked:** ${whyStrong.join("; ")}`);
+      lines.push("");
+    }
+    if (whyHigh.length > 0) {
+      lines.push(`**Why HIGH blocked:** ${whyHigh.join("; ")}`);
+      lines.push("");
+    }
+    if (whyCont.length > 0) {
+      lines.push(`**Why CONT blocked:** ${whyCont.join("; ")}`);
+      lines.push("");
+    }
+    lines.push(`**Rare:** ${d.rareStates.rare.length ? d.rareStates.rare.map((x) => `${x.state}.${x.value} ${x.pct}%`).join("; ") : "—"}`);
+    lines.push(`**Unreachable:** ${d.rareStates.unreachable.length ? d.rareStates.unreachable.map((x) => `${x.state}.${x.value}`).join(", ") : "—"}`);
+    lines.push("");
+    lines.push(`**Suggested:** ${suggested}`);
+    lines.push("");
+  }
 
   return lines.join("\n");
 }
@@ -237,6 +293,22 @@ export const AggregateDiagnosticsPanel = forwardRef<
   const [loading, setLoading] = useState(false);
   const [expandedTfs, setExpandedTfs] = useState<Set<string>>(() => new Set(TIMEFRAME_ORDER));
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
+  const [activeConfig, setActiveConfig] = useState<Engine2LogicConfig | null>(null);
+
+  useEffect(() => {
+    const sync = () => setActiveConfig(getConfig(getActiveOverrides()));
+    sync();
+    window.addEventListener("focus", sync);
+    return () => window.removeEventListener("focus", sync);
+  }, []);
+
+  const c = activeConfig;
+  const gatingTooltips = {
+    align: c ? `alignment_score < ${c.alignment_strong}` : "alignment_score < 0.75",
+    high: c ? `multi_tf_stack_score < ${c.conf_high_stack}` : "stack < 0.7",
+    med: c ? `multi_tf_stack_score < ${c.conf_medium_stack}` : "stack < 0.4",
+    cont: c ? `wave3_probability < ${c.bias_cont_wave3}` : "wave3 < 0.6",
+  };
 
   const toggleTf = useCallback((tf: string) => {
     setExpandedTfs((prev) => {
@@ -259,10 +331,11 @@ export const AggregateDiagnosticsPanel = forwardRef<
     if (!symbol) return;
     setLoading(true);
     const limit = "5000";
+    const overridesFragment = getActiveOverridesQueryFragment();
     Promise.all(
       TIMEFRAME_ORDER.map((tf) => {
         const params = new URLSearchParams({ symbol, timeframe: tf, limit });
-        return fetch(`/api/alignment-engine/diagnostics?${params}`)
+        return fetch(`/api/alignment-engine/diagnostics?${params}${overridesFragment}`)
           .then((r) => r.json())
           .then((body: DiagnosticsApiResult | { error?: string; detail?: string }) => {
             if ("error" in body && body.error)
@@ -314,21 +387,6 @@ export const AggregateDiagnosticsPanel = forwardRef<
   };
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
-      <div className="flex flex-col gap-1">
-        <h3 className="text-sm font-semibold text-foreground">
-          Engine 2 Diagnostics — Comparative View
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          {symbol} · Cross-timeframe outcome, gating, signal density, and role classification.
-        </p>
-      </div>
-
-      {!hasResults && !loading && (
-        <p className="text-xs text-muted-foreground">
-          Click “Run all timeframes” to fetch diagnostics for 1M, 1W, 1D, 360, 90, 23.
-        </p>
-      )}
-
       {hasResults && (
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto pb-4 lg:grid-cols-2">
           <div className="flex min-w-0 flex-col gap-3">
@@ -422,10 +480,10 @@ export const AggregateDiagnosticsPanel = forwardRef<
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="w-10 p-1 text-[11px]">TF</TableHead>
-                    <TableHead className="min-w-[70px] p-1 text-right text-[11px]" title="alignment_score < 0.75">STR</TableHead>
-                    <TableHead className="min-w-[70px] p-1 text-right text-[11px]" title="stack < 0.7">HIGH</TableHead>
-                    <TableHead className="min-w-[70px] p-1 text-right text-[11px]" title="stack < 0.4">MED</TableHead>
-                    <TableHead className="min-w-[70px] p-1 text-right text-[11px]" title="wave3 < 0.6">CONT</TableHead>
+                    <TableHead className="min-w-[70px] p-1 text-right text-[11px]" title={gatingTooltips.align}>STR</TableHead>
+                    <TableHead className="min-w-[70px] p-1 text-right text-[11px]" title={gatingTooltips.high}>HIGH</TableHead>
+                    <TableHead className="min-w-[70px] p-1 text-right text-[11px]" title={gatingTooltips.med}>MED</TableHead>
+                    <TableHead className="min-w-[70px] p-1 text-right text-[11px]" title={gatingTooltips.cont}>CONT</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

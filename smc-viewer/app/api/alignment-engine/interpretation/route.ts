@@ -6,6 +6,19 @@ import {
   type MarketInterpretation,
   type ScoresAndWaveInput,
 } from "@/lib/interpretation-engine";
+import type { Engine2LogicOverrides } from "@/lib/engine2-logic-config";
+
+function parseOverrides(searchParams: URLSearchParams): Engine2LogicOverrides | null {
+  const raw = searchParams.get("overrides");
+  if (!raw || typeof raw !== "string") return null;
+  try {
+    const decoded = decodeURIComponent(raw);
+    const parsed = JSON.parse(decoded) as Record<string, number>;
+    return Object.keys(parsed).length > 0 ? (parsed as Engine2LogicOverrides) : null;
+  } catch {
+    return null;
+  }
+}
 
 function toPgTimestamp(s: string | null): string | null {
   if (!s || typeof s !== "string") return null;
@@ -97,6 +110,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const overrides = parseOverrides(searchParams);
+
     if (multiTf) {
       const viewParams = new URLSearchParams({
         symbol: `eq.${encodeURIComponent(symbol)}`,
@@ -136,7 +151,7 @@ export async function GET(request: NextRequest) {
             : null;
         const combined = mergeScoresAndWave(row, waveRow);
         interpretations.push({
-          ...interpret(combined),
+          ...interpret(combined, overrides),
           timeframe: tf,
           timestamp: ts,
         });
@@ -204,11 +219,11 @@ export async function GET(request: NextRequest) {
         ? (stateRows[0] as Record<string, unknown>)
         : null;
     const combined = mergeScoresAndWave(scores, waveRow);
-    const interpretation = interpret(combined);
+    const interpretation = interpret(combined, overrides);
     const diagnostics = searchParams.get("diagnostics") === "1";
     const payload: { interpretation: MarketInterpretation; breakdown?: ReturnType<typeof getBarBreakdown> } = { interpretation };
     if (diagnostics) {
-      payload.breakdown = getBarBreakdown(combined);
+      payload.breakdown = getBarBreakdown(combined, overrides);
     }
     return NextResponse.json(payload);
   } catch (err) {

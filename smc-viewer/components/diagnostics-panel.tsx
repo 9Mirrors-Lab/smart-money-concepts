@@ -5,6 +5,7 @@ import type {
   BarBreakdown,
   MarketInterpretation,
 } from "@/lib/interpretation-engine";
+import { getActiveOverridesQueryFragment } from "@/lib/engine2-version-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Copy, Check } from "lucide-react";
@@ -115,7 +116,7 @@ function getSuggestedInterpretation(d: DiagnosticsApiResult, timeframe: string):
   const strongPct = align.STRONG?.pct ?? 0;
   const highPct = conf.HIGH?.pct ?? 0;
   const neutralPct = bias.NEUTRAL?.pct ?? 0;
-  const stackLow = d.multiTfStackBands["< 0.4"]?.pct ?? 0;
+  const stackLow = Object.entries(d.multiTfStackBands).find(([k]) => k.startsWith("<"))?.[1]?.pct ?? 0;
 
   if (weakPct >= 70 && lowPct >= 90)
     return `${timeframe} is operating as a confirmatory timeframe, not a signal generator.`;
@@ -505,7 +506,8 @@ export function DiagnosticsPanel({
       timestamp: currentTimestamp,
       diagnostics: "1",
     });
-    fetch(`/api/alignment-engine/interpretation?${params}`)
+    const overridesFragment = getActiveOverridesQueryFragment();
+    fetch(`/api/alignment-engine/interpretation?${params}${overridesFragment}`)
       .then((r) => r.json())
       .then((body: { breakdown?: BarBreakdown; error?: string }) => {
         if (cancelled) return;
@@ -531,7 +533,8 @@ export function DiagnosticsPanel({
     setDiagnosticsError(null);
     setDiagnosticsLoading(true);
     const params = new URLSearchParams({ symbol, timeframe, limit: "5000" });
-    fetch(`/api/alignment-engine/diagnostics?${params}`)
+    const overridesFragment = getActiveOverridesQueryFragment();
+    fetch(`/api/alignment-engine/diagnostics?${params}${overridesFragment}`)
       .then((r) => r.json())
       .then((body: DiagnosticsApiResult | { error?: string; detail?: string }) => {
         if ("error" in body && body.error) {

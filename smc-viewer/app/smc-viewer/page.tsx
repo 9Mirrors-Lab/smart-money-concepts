@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SMCChart } from "@/components/chart";
 import { IndicatorPanel } from "@/components/indicator-panel";
@@ -21,6 +23,9 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverDescription,
 } from "@/components/ui/popover";
 import { AlignmentPanel } from "@/components/alignment-panel";
 import { DiagnosticsPanel } from "@/components/diagnostics-panel";
@@ -37,10 +42,13 @@ import {
 } from "@/components/ui/drawer";
 import { formatTimestampEST } from "@/lib/format-time";
 import { frameToPlotly, type WaveStateRow } from "@/lib/frame-to-plotly";
+import { getActiveOverridesQueryFragment, getVersionStore } from "@/lib/engine2-version-store";
 import type { MarketInterpretation } from "@/lib/interpretation-engine";
 import type { SMCDataset, SMCFrame } from "@/lib/smc-types";
 import { useSMCPlayer } from "@/lib/use-smc-player";
-import { PanelRightClose, PanelRightOpen, ChevronRight, LayoutGrid, X, Download } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Columns2, Square, SquareX, X, Download, BarChart2, LayoutGrid } from "lucide-react";
+import { ChartNavBar } from "@/components/app-nav";
 
 interface DatasetOption {
   id: string;
@@ -170,8 +178,16 @@ function SMCViewer({
   const [multiTfView, setMultiTfView] = useState(false);
   type TrayStage = "closed" | "cards" | "cardsAndDiagnostics";
   const [trayStage, setTrayStage] = useState<TrayStage>("closed");
+  const searchParams = useSearchParams();
   const [aggregateDrawerOpen, setAggregateDrawerOpen] = useState(false);
   const aggregatePanelRef = useRef<AggregateDiagnosticsPanelHandle>(null);
+
+  useEffect(() => {
+    if (searchParams.get("open") === "all-timeframes") {
+      setAggregateDrawerOpen(true);
+      window.history.replaceState(null, "", "/smc-viewer");
+    }
+  }, [searchParams]);
   const [aggregatePanelState, setAggregatePanelState] = useState({
     loading: false,
     hasResults: false,
@@ -182,6 +198,18 @@ function SMCViewer({
     globalBiasBanner?: string;
   } | null>(null);
   const [multiTfLoading, setMultiTfLoading] = useState(false);
+
+  /** Sync Engine 2 active version so interpretation refetches when it changes (e.g. after Tune). */
+  const [engine2VersionKey, setEngine2VersionKey] = useState<string>("default");
+  useEffect(() => {
+    const sync = () => {
+      const store = getVersionStore();
+      setEngine2VersionKey(store.activeVersionId ?? "default");
+    };
+    sync();
+    window.addEventListener("focus", sync);
+    return () => window.removeEventListener("focus", sync);
+  }, []);
 
   const {
     currentFrame,
@@ -252,7 +280,8 @@ function SMCViewer({
       timeframe: meta.timeframe,
       timestamp: current.timestamp,
     });
-    fetch(`/api/alignment-engine/interpretation?${params}`)
+    const overridesFragment = getActiveOverridesQueryFragment();
+    fetch(`/api/alignment-engine/interpretation?${params}${overridesFragment}`)
       .then((r) => r.json())
       .then((body: { interpretation?: MarketInterpretation | null; error?: string }) => {
         if (cancelled) return;
@@ -276,7 +305,7 @@ function SMCViewer({
     return () => {
       cancelled = true;
     };
-  }, [meta.symbol, meta.timeframe, current?.timestamp, multiTfView]);
+  }, [meta.symbol, meta.timeframe, current?.timestamp, multiTfView, engine2VersionKey]);
 
   useEffect(() => {
     if (!multiTfView || !meta.symbol) {
@@ -285,7 +314,8 @@ function SMCViewer({
     }
     let cancelled = false;
     setMultiTfLoading(true);
-    fetch(`/api/alignment-engine/interpretation?symbol=${encodeURIComponent(meta.symbol)}&multiTf=1`)
+    const overridesFragment = getActiveOverridesQueryFragment();
+    fetch(`/api/alignment-engine/interpretation?symbol=${encodeURIComponent(meta.symbol)}&multiTf=1${overridesFragment}`)
       .then((r) => r.json())
       .then((body: { interpretations?: (MarketInterpretation & { timeframe: string; timestamp?: string })[]; globalBiasBanner?: string; error?: string }) => {
         if (cancelled) return;
@@ -307,7 +337,7 @@ function SMCViewer({
     return () => {
       cancelled = true;
     };
-  }, [multiTfView, meta.symbol]);
+  }, [multiTfView, meta.symbol, engine2VersionKey]);
 
   const plotlyResult = useMemo(() => {
     if (!current) return { data: [], layout: { shapes: [], annotations: [] } };
@@ -349,155 +379,136 @@ function SMCViewer({
   }, [stepForward, stepBack]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
-        <div className="flex flex-wrap items-center gap-2 gap-y-1 md:gap-4">
-          <Select value={selectedDatasetId} onValueChange={onDatasetChange}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Chart" />
-            </SelectTrigger>
-            <SelectContent>
-              {datasets.map((d) => (
-                <SelectItem key={d.id} value={d.id}>
-                  {d.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <span className="text-sm font-medium tabular-nums text-muted-foreground">
-            {current?.timestamp ? formatTimestampEST(current.timestamp) : "—"}
-          </span>
-          <span className="text-sm text-muted-foreground">
-            {meta.symbol} · {meta.timeframe}
-          </span>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm">
-                Indicators
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-56 p-0" align="start">
-              <IndicatorPanel
-                visibility={indicatorVisibility}
-                onToggle={toggleIndicator}
-                onCandlesOnly={setCandlesOnly}
-              />
-            </PopoverContent>
-          </Popover>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm">
-                DB Export
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-72 p-0" align="start">
-              <ExportPanel
-                symbol={meta.symbol ?? ""}
-                currentTimeframe={meta.timeframe ?? "23"}
-                onExportSuccess={onRefresh}
-              />
-            </PopoverContent>
-          </Popover>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm">
-                Time conversion
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-72 p-0" align="start">
-              <TimeConverter />
-            </PopoverContent>
-          </Popover>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm">
-                Square chart
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-64 p-0" align="start">
-              <div className="flex flex-col gap-3 rounded-lg border-0 bg-card p-3">
-                <h3 className="text-sm font-medium text-foreground">Square chart</h3>
-                <p className="text-xs text-muted-foreground">
-                  Set Y-axis to a swing low and swing high so the chart frames that range.
-                </p>
-                <div className="space-y-2">
-                  <label htmlFor="square-low" className="text-xs text-muted-foreground">
-                    Swing low
-                  </label>
-                  <input
-                    id="square-low"
-                    type="number"
-                    step="any"
-                    placeholder="e.g. 3200"
-                    value={swingLowInput}
-                    onChange={(e) => setSwingLowInput(e.target.value)}
-                    className="border-input bg-background w-full rounded-md border px-2.5 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label htmlFor="square-high" className="text-xs text-muted-foreground">
-                    Swing high
-                  </label>
-                  <input
-                    id="square-high"
-                    type="number"
-                    step="any"
-                    placeholder="e.g. 3400"
-                    value={swingHighInput}
-                    onChange={(e) => setSwingHighInput(e.target.value)}
-                    className="border-input bg-background w-full rounded-md border px-2.5 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" onClick={handleSquareChart}>
-                    Square chart
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={handleClearSquare}>
-                    Clear
-                  </Button>
-                </div>
-                <div className="border-t border-border pt-2">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="square-log-scale"
-                      checked={logScale}
-                      onCheckedChange={(c) => setLogScale(c === true)}
+    <div className="flex min-h-screen flex-1 flex-col bg-background text-foreground">
+      <ChartNavBar
+        rightContent={
+          <>
+            <span className="text-sm font-medium tabular-nums text-muted-foreground">
+              {current?.timestamp ? formatTimestampEST(current.timestamp) : "—"}
+            </span>
+            <span className="text-sm text-muted-foreground">
+              {meta.symbol} · {meta.timeframe}
+            </span>
+            <span className="text-sm text-muted-foreground">Timeframe</span>
+            <Select value={selectedDatasetId} onValueChange={onDatasetChange}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Chart" />
+              </SelectTrigger>
+              <SelectContent>
+                {datasets.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm">
+                  Settings
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[320px] max-h-[85vh] overflow-y-auto p-0" align="start">
+                <PopoverHeader className="px-4 pt-3">
+                  <PopoverTitle>Settings</PopoverTitle>
+                  <PopoverDescription>
+                    Chart display, export, time conversion, and square chart.
+                  </PopoverDescription>
+                </PopoverHeader>
+                <div className="flex flex-col border-t border-border">
+                  <div className="border-b border-border p-3">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">Indicators</p>
+                    <IndicatorPanel
+                      visibility={indicatorVisibility}
+                      onToggle={toggleIndicator}
+                      onCandlesOnly={setCandlesOnly}
                     />
-                    <Label htmlFor="square-log-scale" className="cursor-pointer text-sm font-normal">
-                      Log scale (Y-axis)
-                    </Label>
+                  </div>
+                  <div className="border-b border-border p-3">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">DB Export</p>
+                    <ExportPanel
+                      symbol={meta.symbol ?? ""}
+                      currentTimeframe={meta.timeframe ?? "23"}
+                      onExportSuccess={onRefresh}
+                    />
+                  </div>
+                  <div className="border-b border-border p-3">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">Time conversion</p>
+                    <TimeConverter />
+                  </div>
+                  <div className="p-3">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">Square chart</p>
+                    <p className="mb-2 text-xs text-muted-foreground">
+                      Set Y-axis to a swing low and swing high so the chart frames that range.
+                    </p>
+                    <div className="space-y-2">
+                      <label htmlFor="square-low" className="text-xs text-muted-foreground">
+                        Swing low
+                      </label>
+                      <input
+                        id="square-low"
+                        type="number"
+                        step="any"
+                        placeholder="e.g. 3200"
+                        value={swingLowInput}
+                        onChange={(e) => setSwingLowInput(e.target.value)}
+                        className="border-input bg-background w-full rounded-md border px-2.5 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      />
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      <label htmlFor="square-high" className="text-xs text-muted-foreground">
+                        Swing high
+                      </label>
+                      <input
+                        id="square-high"
+                        type="number"
+                        step="any"
+                        placeholder="e.g. 3400"
+                        value={swingHighInput}
+                        onChange={(e) => setSwingHighInput(e.target.value)}
+                        className="border-input bg-background w-full rounded-md border px-2.5 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      />
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <Button type="button" size="sm" onClick={handleSquareChart}>
+                        Square chart
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={handleClearSquare}>
+                        Clear
+                      </Button>
+                    </div>
+                    <div className="mt-2 flex items-center space-x-2">
+                      <Checkbox
+                        id="square-log-scale"
+                        checked={logScale}
+                        onCheckedChange={(c) => setLogScale(c === true)}
+                      />
+                      <Label htmlFor="square-log-scale" className="cursor-pointer text-sm font-normal">
+                        Log scale (Y-axis)
+                      </Label>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </PopoverContent>
-          </Popover>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setAggregateDrawerOpen(true)}
-            title="Aggregate Engine 2 diagnostics across all timeframes"
-          >
-            <LayoutGrid className="size-3.5" />
-            All timeframes
-          </Button>
-        </div>
-        <JumpToEvent
-          frames={frames}
-          currentFrame={currentFrame}
-          onJump={(idx) => {
-            goToFrame(idx);
-            setIsPlaying(false);
-          }}
-        />
-      </header>
+              </PopoverContent>
+            </Popover>
+            <JumpToEvent
+              frames={frames}
+              currentFrame={currentFrame}
+              onJump={(idx) => {
+                goToFrame(idx);
+                setIsPlaying(false);
+              }}
+            />
+          </>
+        }
+      />
 
       <div className="relative flex min-h-0 flex-1 flex-col p-4" style={{ minHeight: 0 }}>
         <main
           className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg border-2 bg-card p-2"
           style={{ minHeight: 0, borderColor: "rgba(50, 54, 62, 0.95)" }}
         >
-          <div ref={chartContainerRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          <div ref={chartContainerRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <SMCChart
               data={plotlyResult.data}
               layout={plotlyResult.layout}
@@ -520,10 +531,11 @@ function SMCViewer({
                     variant="secondary"
                     size="sm"
                     className="h-12 rounded-l-md rounded-r-none border border-r-0 border-border shadow-md"
-                    title="Engine 2"
+                    title="Open Engine 2 panel"
+                    aria-label="Open Engine 2 panel"
                   >
                     <span className="text-xs font-medium">Engine 2</span>
-                    <ChevronRight className="ml-1 size-3.5 shrink-0" />
+                    <Columns2 className="ml-1 size-4 shrink-0" aria-hidden />
                   </Button>
                 </DrawerTrigger>
               </div>
@@ -533,59 +545,65 @@ function SMCViewer({
                 style={{
                   width:
                     trayStage === "cardsAndDiagnostics"
-                      ? "min(720px, 90vw)"
-                      : "min(420px, 85vw)",
+                      ? "min(880px, 92vw)"
+                      : "min(520px, 90vw)",
                 }}
               >
                 <DrawerTitle className="sr-only">Engine 2</DrawerTitle>
                 <div className="no-scrollbar flex h-full flex-1 flex-row overflow-y-auto">
-                  <div className="flex w-[400px] min-w-[400px] shrink-0 flex-col gap-2 p-3">
+                  <div className="flex w-[460px] min-w-[460px] shrink-0 flex-col gap-2 p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        Engine 2
-                      </span>
+                      <Tabs
+                        value={multiTfView ? "multi" : "current"}
+                        onValueChange={(v) => setMultiTfView(v === "multi")}
+                      >
+                        <TabsList>
+                          <TabsTrigger value="current">
+                            <BarChart2 aria-hidden />
+                            Current bar
+                          </TabsTrigger>
+                          <TabsTrigger value="multi">
+                            <LayoutGrid aria-hidden />
+                            Multi-TF
+                          </TabsTrigger>
+                        </TabsList>
+                      </Tabs>
                       <div className="flex items-center gap-1">
-                        <Button
-                          variant={multiTfView ? "secondary" : "outline"}
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => setMultiTfView((v) => !v)}
-                        >
-                          {multiTfView ? "Current bar" : "Multi-TF"}
-                        </Button>
                         {trayStage === "cards" && (
                           <Button
                             variant="outline"
                             size="sm"
                             className="h-7 text-xs"
                             onClick={() => setTrayStage("cardsAndDiagnostics")}
-                            title="Open diagnostics"
+                            title="Open diagnostics panel"
+                            aria-label="Open diagnostics panel"
                           >
-                            <PanelRightOpen className="size-3.5" />
+                            <Columns2 className="size-4" aria-hidden />
                           </Button>
                         )}
-                        {trayStage === "cardsAndDiagnostics" ? (
+                        {trayStage === "cardsAndDiagnostics" && (
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-7 px-1"
                             onClick={() => setTrayStage("cards")}
-                            title="Close diagnostics"
+                            title="Close diagnostics panel"
+                            aria-label="Close diagnostics panel"
                           >
-                            <PanelRightClose className="size-4" />
+                            <Square className="size-4" aria-hidden />
                           </Button>
-                        ) : (
-                          <DrawerClose asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-1"
-                              title="Close"
-                            >
-                              <PanelRightClose className="size-4" />
-                            </Button>
-                          </DrawerClose>
                         )}
+                        <DrawerClose asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-1"
+                            title="Close panel"
+                            aria-label="Close Engine 2 panel"
+                          >
+                            <SquareX className="size-4" aria-hidden />
+                          </Button>
+                        </DrawerClose>
                       </div>
                     </div>
                     <AlignmentPanel
@@ -630,10 +648,15 @@ function SMCViewer({
               <DrawerContent direction="bottom" showOverlay className="flex h-[95vh] max-h-[95vh] flex-col">
                 <DrawerTitle className="sr-only">Aggregate Engine 2 diagnostics</DrawerTitle>
                 <div className="flex flex-1 flex-col overflow-hidden">
-                  <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2">
-                    <span className="text-sm font-medium text-foreground">
-                      All timeframes
-                    </span>
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border px-4 py-2">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-sm font-medium text-foreground">
+                        All timeframes
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        Engine 2 Diagnostics — Comparative View · {meta.symbol} · Cross-timeframe outcome, gating, signal density, and role classification.
+                      </span>
+                    </div>
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
@@ -643,6 +666,11 @@ function SMCViewer({
                       >
                         {aggregatePanelState.loading ? "Running all…" : "Run all timeframes"}
                       </Button>
+                      <Link href="/engine2-checklist">
+                        <Button variant="outline" size="sm">
+                          Diagnostic checklist
+                        </Button>
+                      </Link>
                       {aggregatePanelState.hasResults && (
                         <Button
                           variant="outline"

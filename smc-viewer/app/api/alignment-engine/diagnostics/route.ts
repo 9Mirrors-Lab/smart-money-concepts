@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { interpret, type MarketInterpretation, type ScoresAndWaveInput } from "@/lib/interpretation-engine";
+import { getConfig, type Engine2LogicConfig, type Engine2LogicOverrides } from "@/lib/engine2-logic-config";
+
+function parseOverrides(searchParams: URLSearchParams): Engine2LogicOverrides | null {
+  const raw = searchParams.get("overrides");
+  if (!raw || typeof raw !== "string") return null;
+  try {
+    const decoded = decodeURIComponent(raw);
+    const parsed = JSON.parse(decoded) as Record<string, number>;
+    return Object.keys(parsed).length > 0 ? (parsed as Engine2LogicOverrides) : null;
+  } catch {
+    return null;
+  }
+}
 
 function toPgTimestamp(s: string | null): string | null {
   if (!s || typeof s !== "string") return null;
@@ -76,8 +89,8 @@ interface RowInputs {
   momentum_strength_score: number | null;
 }
 
-/** Predefined queries + gating + rare states from a list of interpreted rows. */
-function runDiagnostics(rows: RowInputs[]): {
+/** Predefined queries + gating + rare states from a list of interpreted rows. Uses config for labels and band boundaries. */
+function runDiagnostics(rows: RowInputs[], c: Engine2LogicConfig): {
   distribution: {
     alignment_state: Record<string, { count: number; pct: number }>;
     confidence_level: Record<string, { count: number; pct: number }>;
@@ -100,7 +113,6 @@ function runDiagnostics(rows: RowInputs[]): {
 } {
   const n = rows.length;
   const pct = (c: number) => (n > 0 ? Math.round((c / n) * 10000) / 100 : 0);
-  const interpretations = rows.map((r) => r.interpretation);
 
   const alignCounts: Record<string, number> = {};
   const confCounts: Record<string, number> = {};
@@ -143,17 +155,22 @@ function runDiagnostics(rows: RowInputs[]): {
     wave5_exhaustion_count: wave5ExhaustionCount,
   };
 
-  const bandHigh = rows.filter((r) => (r.multi_tf_stack_score ?? 0) >= 0.7).length;
+  const bandHigh = rows.filter((r) => (r.multi_tf_stack_score ?? 0) >= c.conf_high_stack).length;
   const bandMid = rows.filter((r) => {
     const x = r.multi_tf_stack_score ?? 0;
-    return x >= 0.4 && x < 0.7;
+    return x >= c.conf_medium_stack && x < c.conf_high_stack;
   }).length;
-  const bandLow = rows.filter((r) => (r.multi_tf_stack_score ?? 0) < 0.4).length;
+  const bandLow = rows.filter((r) => (r.multi_tf_stack_score ?? 0) < c.conf_medium_stack).length;
   const multiTfStackBands: Record<string, { count: number; pct: number }> = {
-    ">= 0.7": { count: bandHigh, pct: pct(bandHigh) },
-    "0.4-0.69": { count: bandMid, pct: pct(bandMid) },
-    "< 0.4": { count: bandLow, pct: pct(bandLow) },
+    [`>= ${c.conf_high_stack}`]: { count: bandHigh, pct: pct(bandHigh) },
+    [`${c.conf_medium_stack}-${c.conf_high_stack}`]: { count: bandMid, pct: pct(bandMid) },
+    [`< ${c.conf_medium_stack}`]: { count: bandLow, pct: pct(bandLow) },
   };
+
+  const strongLabel = `alignment_score < ${c.alignment_strong}`;
+  const highStackLabel = `multi_tf_stack_score < ${c.conf_high_stack}`;
+  const highAlignLabel = `alignment_score < ${c.conf_high_align}`;
+  const medStackLabel = `multi_tf_stack_score < ${c.conf_medium_stack}`;
 
   const strongBlockerCounts: Record<string, number> = {};
   const highBlockerCounts: Record<string, number> = {};
@@ -168,20 +185,20 @@ function runDiagnostics(rows: RowInputs[]): {
     const alignScore = r.alignment_score ?? null;
     if (i.alignment_state !== "STRONG") {
       notStrong++;
-      strongBlockerCounts["alignment_score < 0.75"] = (strongBlockerCounts["alignment_score < 0.75"] ?? 0) + 1;
+      strongBlockerCounts[strongLabel] = (strongBlockerCounts[strongLabel] ?? 0) + 1;
     }
     if (i.confidence_level !== "HIGH") {
       notHigh++;
-      if ((stack ?? 0) < 0.7) highBlockerCounts["multi_tf_stack_score < 0.7"] = (highBlockerCounts["multi_tf_stack_score < 0.7"] ?? 0) + 1;
-      if ((alignScore ?? 0) < 0.65) highBlockerCounts["alignment_score < 0.65"] = (highBlockerCounts["alignment_score < 0.65"] ?? 0) + 1;
-      if (i.confidence_level === "LOW" && (stack ?? 0) < 0.4) highBlockerCounts["multi_tf_stack_score < 0.4"] = (highBlockerCounts["multi_tf_stack_score < 0.4"] ?? 0) + 1;
+      if ((stack ?? 0) < c.conf_high_stack) highBlockerCounts[highStackLabel] = (highBlockerCounts[highStackLabel] ?? 0) + 1;
+      if ((alignScore ?? 0) < c.conf_high_align) highBlockerCounts[highAlignLabel] = (highBlockerCounts[highAlignLabel] ?? 0) + 1;
+      if (i.confidence_level === "LOW" && (stack ?? 0) < c.conf_medium_stack) highBlockerCounts[medStackLabel] = (highBlockerCounts[medStackLabel] ?? 0) + 1;
     }
     if (i.dominant_bias !== "CONTINUATION") {
       notCont++;
       const why: string[] = [];
-      if ((r.wave3_probability ?? 0) < 0.6) why.push("wave3_probability < 0.6");
+      if ((r.wave3_probability ?? 0) < c.bias_cont_wave3) why.push(`wave3_probability < ${c.bias_cont_wave3}`);
       if (r.wave_number !== "3") why.push("wave_number ≠ 3");
-      if ((r.momentum_strength_score ?? 0) < 0.55) why.push("momentum_strength_score < 0.55");
+      if ((r.momentum_strength_score ?? 0) < c.bias_cont_momentum) why.push(`momentum_strength_score < ${c.bias_cont_momentum}`);
       const label = why.length ? why.join(", ") : "continuation conditions not met";
       contBlockerCounts[label] = (contBlockerCounts[label] ?? 0) + 1;
     }
@@ -306,12 +323,13 @@ export async function GET(request: NextRequest) {
       if (ts) stateByTs.set(ts, row);
     }
 
+    const overrides = parseOverrides(searchParams);
     const rows: RowInputs[] = [];
     for (const scoreRow of scoreRows) {
       const ts = scoreRow.timestamp as string;
       const waveRow = ts ? stateByTs.get(ts) ?? null : null;
       const combined = mergeScoresAndWave(scoreRow, waveRow);
-      const interpretation = interpret(combined);
+      const interpretation = interpret(combined, overrides);
       rows.push({
         interpretation,
         multi_tf_stack_score: toNum(scoreRow.multi_tf_stack_score),
@@ -322,7 +340,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const result = runDiagnostics(rows);
+    const config = getConfig(overrides);
+    const result = runDiagnostics(rows, config);
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
