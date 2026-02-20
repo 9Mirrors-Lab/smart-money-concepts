@@ -53,7 +53,11 @@ const DrawerContent = React.forwardRef<
         "fixed z-50 flex flex-col border-border bg-background shadow-lg",
         direction === "bottom"
           ? "inset-x-0 bottom-0 top-auto max-h-[95vh] rounded-t-xl border-t border-l border-r"
-          : "inset-y-0 right-0 h-full border-l",
+          : direction === "top"
+            ? "inset-x-0 top-0 bottom-auto max-h-[40vh] rounded-b-xl border-b border-l border-r"
+            : direction === "left"
+              ? "inset-y-0 left-0 h-full w-[min(320px,85vw)] border-r"
+              : "inset-y-0 right-0 h-full border-l",
         "data-[vaul-drawer-direction=right]:data-[state=open]:animate-in data-[vaul-drawer-direction=right]:data-[state=closed]:animate-out",
         "data-[vaul-drawer-direction=right]:data-[state=closed]:slide-out-to-right data-[vaul-drawer-direction=right]:data-[state=open]:slide-in-from-right",
         "data-[vaul-drawer-direction=left]:data-[state=open]:animate-in data-[vaul-drawer-direction=left]:data-[state=closed]:animate-out",

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ChartSettingsProvider } from "@/lib/chart-settings-context";
 import { NavWrapper } from "@/components/nav-wrapper";
 import "./globals.css";
 
@@ -28,7 +29,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col antialiased`}
       >
-        <NavWrapper>{children}</NavWrapper>
+        <ChartSettingsProvider>
+          <NavWrapper>{children}</NavWrapper>
+        </ChartSettingsProvider>
       </body>
     </html>
   );

@@ -4,10 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SMCChart } from "@/components/chart";
-import { IndicatorPanel } from "@/components/indicator-panel";
 import { JumpToEvent } from "@/components/jump-to-event";
-import { TimeConverter } from "@/components/time-converter";
-import { ExportPanel } from "@/components/export-panel";
 import { PlaybackControls } from "@/components/playback-controls";
 import {
   Select,
@@ -17,16 +14,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverDescription,
-} from "@/components/ui/popover";
 import { AlignmentPanel } from "@/components/alignment-panel";
 import { DiagnosticsPanel } from "@/components/diagnostics-panel";
 import {
@@ -38,7 +25,6 @@ import {
   DrawerClose,
   DrawerContent,
   DrawerTitle,
-  DrawerTrigger,
 } from "@/components/ui/drawer";
 import { formatTimestampEST } from "@/lib/format-time";
 import { frameToPlotly, type WaveStateRow } from "@/lib/frame-to-plotly";
@@ -46,9 +32,9 @@ import { getActiveOverridesQueryFragment, getVersionStore } from "@/lib/engine2-
 import type { MarketInterpretation } from "@/lib/interpretation-engine";
 import type { SMCDataset, SMCFrame } from "@/lib/smc-types";
 import { useSMCPlayer } from "@/lib/use-smc-player";
+import { useChartSettings, useChartSettingsRegistration } from "@/lib/chart-settings-context";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Columns2, Square, SquareX, X, Download, BarChart2, LayoutGrid } from "lucide-react";
-import { ChartNavBar } from "@/components/app-nav";
+import { Columns2, Square, SquareX, X, Download, BarChart2, LayoutGrid, ChevronDown, ChevronUp, Wand } from "lucide-react";
 
 interface DatasetOption {
   id: string;
@@ -178,6 +164,8 @@ function SMCViewer({
   const [multiTfView, setMultiTfView] = useState(false);
   type TrayStage = "closed" | "cards" | "cardsAndDiagnostics";
   const [trayStage, setTrayStage] = useState<TrayStage>("closed");
+  const [playbackExpanded, setPlaybackExpanded] = useState(false);
+  const [topBarOpen, setTopBarOpen] = useState(false);
   const searchParams = useSearchParams();
   const [aggregateDrawerOpen, setAggregateDrawerOpen] = useState(false);
   const aggregatePanelRef = useRef<AggregateDiagnosticsPanelHandle>(null);
@@ -228,6 +216,26 @@ function SMCViewer({
     stepForward,
     stepBack,
   } = useSMCPlayer({ frames, defaultSpeed: 1 });
+
+  const chartSettingsReg = useChartSettingsRegistration();
+  const chartSettings = useChartSettings();
+  useEffect(() => {
+    chartSettingsReg.registerChart({
+      indicatorVisibility,
+      toggleIndicator,
+      setCandlesOnly,
+      chartMeta: { symbol: meta.symbol ?? "", timeframe: meta.timeframe ?? "" },
+      onChartRefresh: onRefresh ?? (() => {}),
+    });
+    return () => chartSettingsReg.unregisterChart();
+    // Intentionally omit chartSettingsReg to avoid loop: registerChart updates context, which would retrigger this effect.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta.symbol, meta.timeframe, onRefresh]);
+  useEffect(() => {
+    chartSettingsReg.syncIndicatorVisibility(indicatorVisibility);
+    // Omit chartSettingsReg so sync does not retrigger when context updates after setState.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [indicatorVisibility]);
 
   useEffect(() => {
     if (!frames.length || !meta.symbol || !meta.timeframe) {
@@ -347,23 +355,6 @@ function SMCViewer({
   const handlePlayPause = useCallback(() => setIsPlaying((p) => !p), [setIsPlaying]);
   const handleReverse = useCallback(() => setIsReversed((r) => !r), [setIsReversed]);
 
-  const [squaredRange, setSquaredRange] = useState<[number, number] | null>(null);
-  const [swingLowInput, setSwingLowInput] = useState("");
-  const [swingHighInput, setSwingHighInput] = useState("");
-  const [logScale, setLogScale] = useState(false);
-
-  const handleSquareChart = useCallback(() => {
-    const low = Number.parseFloat(swingLowInput);
-    const high = Number.parseFloat(swingHighInput);
-    if (Number.isFinite(low) && Number.isFinite(high) && low < high) {
-      setSquaredRange([low, high]);
-    }
-  }, [swingLowInput, swingHighInput]);
-
-  const handleClearSquare = useCallback(() => {
-    setSquaredRange(null);
-  }, []);
-
   const chartContainerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = chartContainerRef.current;
@@ -378,130 +369,80 @@ function SMCViewer({
     return () => el.removeEventListener("wheel", onWheel);
   }, [stepForward, stepBack]);
 
+  const toolbarContent = (
+    <>
+      <span className="text-sm font-medium tabular-nums text-muted-foreground">
+        {current?.timestamp ? formatTimestampEST(current.timestamp) : "—"}
+      </span>
+      <span className="text-sm text-muted-foreground">
+        {meta.symbol} · {meta.timeframe}
+      </span>
+      <span className="text-sm text-muted-foreground">Timeframe</span>
+      <Select value={selectedDatasetId} onValueChange={onDatasetChange}>
+        <SelectTrigger className="w-[160px]">
+          <SelectValue placeholder="Chart" />
+        </SelectTrigger>
+        <SelectContent>
+          {datasets.map((d) => (
+            <SelectItem key={d.id} value={d.id}>
+              {d.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <JumpToEvent
+        frames={frames}
+        currentFrame={currentFrame}
+        onJump={(idx) => {
+          goToFrame(idx);
+          setIsPlaying(false);
+        }}
+      />
+    </>
+  );
+
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background text-foreground">
-      <ChartNavBar
-        rightContent={
-          <>
-            <span className="text-sm font-medium tabular-nums text-muted-foreground">
-              {current?.timestamp ? formatTimestampEST(current.timestamp) : "—"}
-            </span>
-            <span className="text-sm text-muted-foreground">
-              {meta.symbol} · {meta.timeframe}
-            </span>
-            <span className="text-sm text-muted-foreground">Timeframe</span>
-            <Select value={selectedDatasetId} onValueChange={onDatasetChange}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Chart" />
-              </SelectTrigger>
-              <SelectContent>
-                {datasets.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    {d.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm">
-                  Settings
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[320px] max-h-[85vh] overflow-y-auto p-0" align="start">
-                <PopoverHeader className="px-4 pt-3">
-                  <PopoverTitle>Settings</PopoverTitle>
-                  <PopoverDescription>
-                    Chart display, export, time conversion, and square chart.
-                  </PopoverDescription>
-                </PopoverHeader>
-                <div className="flex flex-col border-t border-border">
-                  <div className="border-b border-border p-3">
-                    <p className="mb-2 text-xs font-medium text-muted-foreground">Indicators</p>
-                    <IndicatorPanel
-                      visibility={indicatorVisibility}
-                      onToggle={toggleIndicator}
-                      onCandlesOnly={setCandlesOnly}
-                    />
-                  </div>
-                  <div className="border-b border-border p-3">
-                    <p className="mb-2 text-xs font-medium text-muted-foreground">DB Export</p>
-                    <ExportPanel
-                      symbol={meta.symbol ?? ""}
-                      currentTimeframe={meta.timeframe ?? "23"}
-                      onExportSuccess={onRefresh}
-                    />
-                  </div>
-                  <div className="border-b border-border p-3">
-                    <p className="mb-2 text-xs font-medium text-muted-foreground">Time conversion</p>
-                    <TimeConverter />
-                  </div>
-                  <div className="p-3">
-                    <p className="mb-2 text-xs font-medium text-muted-foreground">Square chart</p>
-                    <p className="mb-2 text-xs text-muted-foreground">
-                      Set Y-axis to a swing low and swing high so the chart frames that range.
-                    </p>
-                    <div className="space-y-2">
-                      <label htmlFor="square-low" className="text-xs text-muted-foreground">
-                        Swing low
-                      </label>
-                      <input
-                        id="square-low"
-                        type="number"
-                        step="any"
-                        placeholder="e.g. 3200"
-                        value={swingLowInput}
-                        onChange={(e) => setSwingLowInput(e.target.value)}
-                        className="border-input bg-background w-full rounded-md border px-2.5 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      />
-                    </div>
-                    <div className="mt-2 space-y-2">
-                      <label htmlFor="square-high" className="text-xs text-muted-foreground">
-                        Swing high
-                      </label>
-                      <input
-                        id="square-high"
-                        type="number"
-                        step="any"
-                        placeholder="e.g. 3400"
-                        value={swingHighInput}
-                        onChange={(e) => setSwingHighInput(e.target.value)}
-                        className="border-input bg-background w-full rounded-md border px-2.5 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      />
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      <Button type="button" size="sm" onClick={handleSquareChart}>
-                        Square chart
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={handleClearSquare}>
-                        Clear
-                      </Button>
-                    </div>
-                    <div className="mt-2 flex items-center space-x-2">
-                      <Checkbox
-                        id="square-log-scale"
-                        checked={logScale}
-                        onCheckedChange={(c) => setLogScale(c === true)}
-                      />
-                      <Label htmlFor="square-log-scale" className="cursor-pointer text-sm font-normal">
-                        Log scale (Y-axis)
-                      </Label>
-                    </div>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-            <JumpToEvent
-              frames={frames}
-              currentFrame={currentFrame}
-              onJump={(idx) => {
-                goToFrame(idx);
-                setIsPlaying(false);
-              }}
-            />
-          </>
-        }
-      />
+      {/* Top toolbar: ribbon with π opens drawer (same pattern as right Engine 2 drawer) */}
+      <Drawer
+        direction="top"
+        modal={false}
+        open={topBarOpen}
+        onOpenChange={setTopBarOpen}
+      >
+        <div className="fixed top-0 left-1/2 z-40 -translate-x-1/2">
+          <Button
+            variant="secondary"
+            size="sm"
+            className="nav-tab-trigger-top h-8 w-8 rounded-b-lg rounded-t-none p-0 text-base"
+            title="Open chart toolbar"
+            aria-label="Open chart toolbar"
+            onClick={() => setTopBarOpen((open) => !open)}
+          >
+            <span className="pi-icon" aria-hidden>π</span>
+          </Button>
+        </div>
+        <DrawerContent
+          direction="top"
+          showOverlay={false}
+          className="rounded-b-xl border-b shadow-lg"
+        >
+          <DrawerTitle className="sr-only">Chart toolbar</DrawerTitle>
+          <div className="flex flex-wrap items-center justify-center gap-2 px-4 py-3 md:gap-4">
+            {toolbarContent}
+            <DrawerClose asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                aria-label="Close toolbar"
+              >
+                <X className="size-4" />
+              </Button>
+            </DrawerClose>
+          </div>
+        </DrawerContent>
+      </Drawer>
 
       <div className="relative flex min-h-0 flex-1 flex-col p-4" style={{ minHeight: 0 }}>
         <main
@@ -512,10 +453,10 @@ function SMCViewer({
             <SMCChart
               data={plotlyResult.data}
               layout={plotlyResult.layout}
-              yRange={squaredRange}
-              yAxisType={logScale ? "log" : "linear"}
+              yRange={chartSettings.squaredRange}
+              yAxisType={chartSettings.logScale ? "log" : "linear"}
             />
-            {/* Engine 2: Drawer from the right, two-stage (cards then cards + diagnostics) */}
+            {/* Engine 2: Drawer from the right, two-stage (cards then cards + diagnostics); trigger is in footer */}
             <Drawer
               direction="right"
               modal={false}
@@ -525,20 +466,6 @@ function SMCViewer({
                 else setTrayStage("closed");
               }}
             >
-              <div className="absolute right-0 top-0 z-40 flex h-full flex-col justify-center">
-                <DrawerTrigger asChild>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="h-12 rounded-l-md rounded-r-none border border-r-0 border-border shadow-md"
-                    title="Open Engine 2 panel"
-                    aria-label="Open Engine 2 panel"
-                  >
-                    <span className="text-xs font-medium">Engine 2</span>
-                    <Columns2 className="ml-1 size-4 shrink-0" aria-hidden />
-                  </Button>
-                </DrawerTrigger>
-              </div>
               <DrawerContent
                 showOverlay={false}
                 className="top-0 mt-0 h-full max-h-full rounded-none border-l transition-[width] duration-300 ease-out"
@@ -569,6 +496,9 @@ function SMCViewer({
                         </TabsList>
                       </Tabs>
                       <div className="flex items-center gap-1">
+                        <Link href="/engine2" className="text-xs text-primary underline">
+                          Open Engine 2 hub
+                        </Link>
                         {trayStage === "cards" && (
                           <Button
                             variant="outline"
@@ -666,9 +596,9 @@ function SMCViewer({
                       >
                         {aggregatePanelState.loading ? "Running all…" : "Run all timeframes"}
                       </Button>
-                      <Link href="/engine2-checklist">
+                      <Link href="/engine2">
                         <Button variant="outline" size="sm">
-                          Diagnostic checklist
+                          Open Engine 2 hub
                         </Button>
                       </Link>
                       {aggregatePanelState.hasResults && (
@@ -703,20 +633,54 @@ function SMCViewer({
         </main>
       </div>
 
-      <footer className="shrink-0 border-t border-border p-4">
-        <PlaybackControls
-          currentFrame={currentFrame}
-          totalFrames={totalFrames}
-          isPlaying={isPlaying}
-          onPlayPause={handlePlayPause}
-          speed={speed}
-          onSpeedChange={setSpeed}
-          isReversed={isReversed}
-          onReverse={handleReverse}
-          onFrameChange={goToFrame}
-          onStepBack={stepBack}
-          onStepForward={stepForward}
-        />
+      {/* Engine 2 tab: floats above footer like left nav tab, does not push down playback */}
+      <div className="fixed bottom-24 right-0 z-40">
+        <Button
+          variant="secondary"
+          size="sm"
+          className="nav-tab-trigger nav-tab-trigger-right h-10 w-10 rounded-l-md rounded-r-none border border-r-0 p-0"
+          title="Open Engine 2 panel"
+          aria-label="Open Engine 2 panel"
+          onClick={() =>
+            setTrayStage(trayStage === "closed" ? "cards" : "closed")
+          }
+        >
+          <Wand className="size-4 shrink-0" aria-hidden />
+        </Button>
+      </div>
+
+      <footer className="shrink-0 border-t border-border">
+        <button
+          type="button"
+          onClick={() => setPlaybackExpanded((e) => !e)}
+          className="flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-sm font-medium text-foreground hover:bg-accent/50 transition-colors"
+          aria-expanded={playbackExpanded}
+          aria-label={playbackExpanded ? "Collapse playback" : "Expand playback"}
+        >
+          <span>Playback</span>
+          {playbackExpanded ? (
+            <ChevronUp className="size-4 shrink-0" aria-hidden />
+          ) : (
+            <ChevronDown className="size-4 shrink-0" aria-hidden />
+          )}
+        </button>
+        {playbackExpanded && (
+          <div className="border-t border-border p-4">
+            <PlaybackControls
+              currentFrame={currentFrame}
+              totalFrames={totalFrames}
+              isPlaying={isPlaying}
+              onPlayPause={handlePlayPause}
+              speed={speed}
+              onSpeedChange={setSpeed}
+              isReversed={isReversed}
+              onReverse={handleReverse}
+              onFrameChange={goToFrame}
+              onStepBack={stepBack}
+              onStepForward={stepForward}
+            />
+          </div>
+        )}
       </footer>
     </div>
   );

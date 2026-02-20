@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -72,7 +73,7 @@ function useActiveConfig() {
   return config;
 }
 
-export default function Engine2ScorecardPage() {
+export function Engine2ScorecardContent() {
   const [state, setState] = useState<Engine2ChecklistState | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const versionInUse = useVersionInUse();
@@ -89,7 +90,7 @@ export default function Engine2ScorecardPage() {
 
   if (!hydrated) {
     return (
-      <div className="min-h-screen bg-background p-6 text-muted-foreground">
+      <div className="p-6 text-muted-foreground">
         Loading scorecard…
       </div>
     );
@@ -108,43 +109,24 @@ export default function Engine2ScorecardPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-4">
-          <div className="flex items-center gap-3">
-            <LayoutDashboard className="size-6 text-muted-foreground" />
-            <div>
-              <h1 className="text-lg font-semibold">Engine 2 diagnostic scorecard</h1>
-              <p className="text-sm text-muted-foreground">
-                Evaluate whether Engine 2 is behaving as intended; checklist responses feed this view.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-muted-foreground mr-1 text-sm">
-              Logic in use: <span className="font-medium text-foreground">{versionInUse}</span>
-              {config != null && (
-                <span className="ml-1 text-muted-foreground">(thresholds below from active config)</span>
-              )}
-              {" · "}
-              <Link href="/engine2-tune" className="text-primary underline">Tune</Link>
-            </span>
-            <Button variant="outline" size="sm" onClick={refresh}>
-              Refresh from checklist
-            </Button>
-            <Engine2Nav />
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-4xl space-y-8 px-4 py-6">
+    <>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-sm text-muted-foreground">
+          Logic in use: <span className="font-medium text-foreground">{versionInUse}</span>
+          {config != null && (
+            <span className="ml-1 text-muted-foreground">(thresholds below from active config)</span>
+          )}
+          {" · "}
+          <Link href="/engine2?tab=tune" className="text-primary underline">Tune</Link>
+        </span>
+        <Button variant="outline" size="sm" onClick={refresh}>
+          Refresh from checklist
+        </Button>
+      </div>
+      <div className="w-full max-w-4xl space-y-8">
         {!hasChecklistData && (
           <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
-            No checklist data yet. Complete the{" "}
-            <Link href="/engine2-checklist" className="underline">
-              Engine 2 diagnostic checklist
-            </Link>{" "}
-            and your responses will appear here.
+            No checklist data yet. Complete the Checklist section (left or above) and your responses will appear here.
           </div>
         )}
 
@@ -466,11 +448,23 @@ export default function Engine2ScorecardPage() {
         </section>
 
         <div className="pb-8">
-          <Link href="/engine2-checklist">
+          <a href="#checklist">
             <Button variant="outline">Back to checklist</Button>
-          </Link>
+          </a>
         </div>
-      </main>
+      </div>
+    </>
+  );
+}
+
+export default function Engine2ScorecardPage() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/engine2?tab=evaluate");
+  }, [router]);
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
+      Redirecting to Engine 2 hub…
     </div>
   );
 }

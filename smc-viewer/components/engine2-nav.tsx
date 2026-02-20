@@ -3,13 +3,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-const ENGINE2_NAV_LINKS = [
-  { href: "/engine2-logic-inventory", label: "Logic inventory" },
-  { href: "/engine2-diagnostic-flow", label: "Diagnostic flow" },
-  { href: "/engine2-checklist", label: "Checklist" },
-  { href: "/engine2-scorecard", label: "Scorecard" },
-  { href: "/engine2-tune", label: "Tune" },
-] as const;
+const ENGINE2_NAV_LINKS: { href: string; label: string }[] = [];
 
 export function Engine2Nav() {
   return (

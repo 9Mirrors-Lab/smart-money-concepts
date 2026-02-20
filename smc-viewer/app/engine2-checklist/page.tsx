@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -57,7 +58,7 @@ function useVersionInUse() {
   return versionLabel;
 }
 
-export default function Engine2ChecklistPage() {
+export function Engine2ChecklistContent() {
   const [state, setState] = useState<Engine2ChecklistState>(defaultChecklistState);
   const [hydrated, setHydrated] = useState(false);
   const versionInUse = useVersionInUse();
@@ -123,53 +124,37 @@ export default function Engine2ChecklistPage() {
 
   if (!hydrated) {
     return (
-      <div className="min-h-screen bg-background p-6 text-muted-foreground">
+      <div className="p-6 text-muted-foreground">
         Loading checklist…
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-4">
-          <div className="flex items-center gap-3">
-            <ClipboardList className="size-6 text-muted-foreground" />
-            <div>
-              <h1 className="text-lg font-semibold">Engine 2 diagnostic checklist</h1>
-              <p className="text-sm text-muted-foreground">
-                Use after Engine 2 diagnostic. Answer using grid values; only consider tuning when a
-                pattern repeats across multiple timeframes.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-muted-foreground mr-1 text-sm">
-              Logic in use: <span className="font-medium text-foreground">{versionInUse}</span>
-              {" · "}
-              <Link href="/engine2-tune" className="text-primary underline">Tune</Link>
-            </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                const seed = {
-                  ...engine2ChecklistSeedKcexEthusdt,
-                  lastUpdated: new Date().toISOString(),
-                };
-                setState(seed);
-                saveState(seed);
-              }}
-            >
-              <FileDown className="mr-2 size-4" />
-              Load first analysis (KCEX_ETHUSDT.P)
-            </Button>
-            <Engine2Nav />
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-4xl space-y-8 px-4 py-6">
+    <>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-sm text-muted-foreground">
+          Logic in use: <span className="font-medium text-foreground">{versionInUse}</span>
+          {" · "}
+          <Link href="/engine2?tab=tune" className="text-primary underline">Tune</Link>
+        </span>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            const seed = {
+              ...engine2ChecklistSeedKcexEthusdt,
+              lastUpdated: new Date().toISOString(),
+            };
+            setState(seed);
+            saveState(seed);
+          }}
+        >
+          <FileDown className="mr-2 size-4" />
+          Load first analysis (KCEX_ETHUSDT.P)
+        </Button>
+      </div>
+      <div className="w-full max-w-4xl space-y-8">
         {/* Diagnostic markdown input */}
         <section className="space-y-2">
           <Label className="text-base font-medium">Engine 2 diagnostic markdown</Label>
@@ -555,11 +540,23 @@ export default function Engine2ChecklistPage() {
         </SectionCard>
 
         <div className="flex justify-end gap-2 pb-8">
-          <Link href="/engine2-scorecard">
+          <a href="#scorecard">
             <Button>View diagnostic scorecard</Button>
-          </Link>
+          </a>
         </div>
-      </main>
+      </div>
+    </>
+  );
+}
+
+export default function Engine2ChecklistPage() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/engine2?tab=evaluate");
+  }, [router]);
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
+      Redirecting to Engine 2 hub…
     </div>
   );
 }
