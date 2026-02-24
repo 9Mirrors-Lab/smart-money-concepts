@@ -76,12 +76,18 @@ function mergeScoresAndWave(
   };
 }
 
+/** Timeframe order for multi-TF "as of" queries (matches alignment panel display order). */
+const MULTI_TF_TIMEFRAMES = ["1M", "1W", "1D", "360", "90", "23"];
+
 /**
  * GET /api/alignment-engine/interpretation?symbol=...&timeframe=...&timestamp=...
  * Returns single Market Interpretation for that bar.
  *
  * GET /api/alignment-engine/interpretation?symbol=...&multiTf=1
- * Returns { interpretations: MarketInterpretation[], globalBiasBanner?: string }.
+ * Returns { interpretations: MarketInterpretation[], globalBiasBanner?: string } (latest per TF).
+ *
+ * GET /api/alignment-engine/interpretation?symbol=...&multiTf=1&timestamp=...
+ * Returns same shape with "latest bar at or before" timestamp for each TF.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -113,48 +119,97 @@ export async function GET(request: NextRequest) {
     const overrides = parseOverrides(searchParams);
 
     if (multiTf) {
-      const viewParams = new URLSearchParams({
-        symbol: `eq.${encodeURIComponent(symbol)}`,
-        order: "timeframe.asc",
-      });
-      const viewRows = await supabaseFetch(
-        baseUrl,
-        anonKey,
-        "vw_alignment_scores_latest_per_tf",
-        viewParams
-      );
+      const asOfRaw = searchParams.get("timestamp");
+      const asOf = asOfRaw ? toPgTimestamp(asOfRaw) : null;
 
       const interpretations: (MarketInterpretation & {
         timeframe: string;
         timestamp: string;
       })[] = [];
-      for (const row of viewRows as Record<string, unknown>[]) {
-        const tf = row.timeframe as string;
-        const ts = row.timestamp as string;
-        if (!tf || !ts) continue;
-        const tsNorm = toPgTimestamp(ts);
-        if (!tsNorm) continue;
-        const stateParams = new URLSearchParams({
+
+      if (asOf) {
+        for (const tf of MULTI_TF_TIMEFRAMES) {
+          const scoreParams = new URLSearchParams({
+            symbol: `eq.${encodeURIComponent(symbol)}`,
+            timeframe: `eq.${encodeURIComponent(tf)}`,
+            timestamp: `lte.${asOf}`,
+            order: "timestamp.desc",
+            limit: "1",
+          });
+          const scoreRows = await supabaseFetch(
+            baseUrl,
+            anonKey,
+            "wave_alignment_scores",
+            scoreParams
+          );
+          if (scoreRows.length === 0) continue;
+          const row = scoreRows[0] as Record<string, unknown>;
+          const ts = row.timestamp as string;
+          if (!ts) continue;
+          const tsNorm = toPgTimestamp(ts);
+          if (!tsNorm) continue;
+          const stateParams = new URLSearchParams({
+            symbol: `eq.${encodeURIComponent(symbol)}`,
+            timeframe: `eq.${encodeURIComponent(tf)}`,
+            timestamp: `eq.${tsNorm}`,
+          });
+          const stateRows = await supabaseFetch(
+            baseUrl,
+            anonKey,
+            "wave_engine_state",
+            stateParams
+          );
+          const waveRow =
+            stateRows.length > 0
+              ? (stateRows[0] as Record<string, unknown>)
+              : null;
+          const combined = mergeScoresAndWave(row, waveRow);
+          interpretations.push({
+            ...interpret(combined, overrides),
+            timeframe: tf,
+            timestamp: ts,
+          });
+        }
+      } else {
+        const viewParams = new URLSearchParams({
           symbol: `eq.${encodeURIComponent(symbol)}`,
-          timeframe: `eq.${encodeURIComponent(tf)}`,
-          timestamp: `eq.${tsNorm}`,
+          order: "timeframe.asc",
         });
-        const stateRows = await supabaseFetch(
+        const viewRows = await supabaseFetch(
           baseUrl,
           anonKey,
-          "wave_engine_state",
-          stateParams
+          "vw_alignment_scores_latest_per_tf",
+          viewParams
         );
-        const waveRow =
-          stateRows.length > 0
-            ? (stateRows[0] as Record<string, unknown>)
-            : null;
-        const combined = mergeScoresAndWave(row, waveRow);
-        interpretations.push({
-          ...interpret(combined, overrides),
-          timeframe: tf,
-          timestamp: ts,
-        });
+
+        for (const row of viewRows as Record<string, unknown>[]) {
+          const tf = row.timeframe as string;
+          const ts = row.timestamp as string;
+          if (!tf || !ts) continue;
+          const tsNorm = toPgTimestamp(ts);
+          if (!tsNorm) continue;
+          const stateParams = new URLSearchParams({
+            symbol: `eq.${encodeURIComponent(symbol)}`,
+            timeframe: `eq.${encodeURIComponent(tf)}`,
+            timestamp: `eq.${tsNorm}`,
+          });
+          const stateRows = await supabaseFetch(
+            baseUrl,
+            anonKey,
+            "wave_engine_state",
+            stateParams
+          );
+          const waveRow =
+            stateRows.length > 0
+              ? (stateRows[0] as Record<string, unknown>)
+              : null;
+          const combined = mergeScoresAndWave(row, waveRow);
+          interpretations.push({
+            ...interpret(combined, overrides),
+            timeframe: tf,
+            timestamp: ts,
+          });
+        }
       }
 
       const globalBiasBanner = computeGlobalBiasBanner(interpretations);

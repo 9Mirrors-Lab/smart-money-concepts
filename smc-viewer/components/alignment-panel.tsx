@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { formatTimestampEST } from "@/lib/format-time";
+import { cn } from "@/lib/utils";
 import type {
   MarketInterpretation,
   AlignmentState,
@@ -10,7 +11,7 @@ import type {
 } from "@/lib/interpretation-engine";
 
 /** Display order for multi-TF: 1M down to 23 (higher TF first). Unknown TFs sort to the end. */
-const TIMEFRAME_ORDER = ["1M", "1W", "1D", "360", "90", "23"];
+const TIMEFRAME_ORDER = ["1M", "1W", "1D", "6H", "90", "23"];
 
 export interface AlignmentPanelProps {
   /** Single-bar interpretation (current frame). */
@@ -25,6 +26,18 @@ export interface AlignmentPanelProps {
   loading?: boolean;
   /** Current bar mode: timeframe of the chart (for alignment rail). */
   currentTimeframe?: string | null;
+  /** When set, multi-TF view shows "As of <date>" (cards are as of this candle, not live latest). */
+  asOfTimestamp?: string | null;
+  /** Multi-TF only: 'stack' = vertical list, 'strip' = horizontal scrollable row of cards. */
+  multiTfLayout?: "stack" | "strip";
+  /** When true, use smaller padding and text (e.g. for drawer cards). */
+  compact?: boolean;
+  /** When true, do not show the timeframe rail (e.g. drawer single-card layout). */
+  hideRail?: boolean;
+  /** When true, do not render warnings inside the card (caller renders WarningsBlock outside). */
+  hideWarnings?: boolean;
+  /** When true, do not render the card wrapper (caller provides same wrapper as other cards for consistent height). */
+  hideCardWrapper?: boolean;
 }
 
 const ALIGNMENT_COLORS: Record<AlignmentState, string> = {
@@ -108,7 +121,7 @@ function BiasIcon({
     ? "drop-shadow-[0_0_6px_currentColor]"
     : "";
 
-  const size = 20;
+  const size = 10;
   const className = `shrink-0 ${colorClass} ${glowClass}`;
 
   return (
@@ -184,32 +197,39 @@ function StatusChip({
   );
 }
 
-function InterpretationBlock({
+export function InterpretationBlock({
   interp,
   showTimeframe,
   timeframe,
   timestamp,
+  compact = false,
+  hideWarnings = false,
 }: {
   interp: MarketInterpretation;
   showTimeframe?: boolean;
   timeframe?: string;
   timestamp?: string | null;
+  compact?: boolean;
+  /** When true, do not render the warnings block (caller renders it outside the card). */
+  hideWarnings?: boolean;
 }) {
+  const textCls = compact ? "text-[10px]" : "text-xs";
+  const gapCls = compact ? "gap-1.5" : "gap-2";
   return (
-    <div className="flex flex-col gap-2">
+    <div className={cn("flex flex-col", gapCls)}>
       {showTimeframe && timeframe && (
         <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <span className={cn("font-medium uppercase tracking-wider text-muted-foreground", textCls)}>
             {timeframe}
           </span>
           {timestamp != null && (
-            <span className="text-[10px] text-muted-foreground">
+            <span className={cn("text-muted-foreground", compact ? "text-[9px]" : "text-[10px]")}>
               {formatTimestampEST(timestamp)}
             </span>
           )}
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className={cn("flex flex-wrap items-center", gapCls)}>
         <AlignmentDots
           state={interp.alignment_state}
           tooltip={buildAlignmentTooltip(interp)}
@@ -219,25 +239,25 @@ function InterpretationBlock({
           confidence={interp.confidence_level}
         />
         <span
-          className={`text-xs ${CONFIDENCE_COLORS[interp.confidence_level]}`}
+          className={cn(textCls, CONFIDENCE_COLORS[interp.confidence_level])}
         >
           CONF: {interp.confidence_level}
         </span>
       </div>
-      <p className="text-xs leading-snug text-foreground/90">
+      <p className={cn("leading-snug text-foreground/90", textCls)}>
         {interp.narrative_summary}
       </p>
       {interp.key_factors.length > 0 && (
-        <ul className="list-inside list-disc space-y-0.5 text-xs text-muted-foreground">
+        <ul className={cn("list-inside list-disc space-y-0.5 text-muted-foreground", textCls)}>
           {interp.key_factors.map((f, i) => (
             <li key={i}>{f}</li>
           ))}
         </ul>
       )}
-      {interp.warnings.length > 0 && (
-        <div className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5">
-          <p className="text-xs font-medium text-amber-400">Warnings</p>
-          <ul className="mt-0.5 list-inside list-disc space-y-0.5 text-xs text-amber-200/90">
+      {!hideWarnings && interp.warnings.length > 0 && (
+        <div className={cn("rounded border border-amber-500/40 bg-amber-500/10", compact ? "px-1.5 py-1" : "px-2 py-1.5")}>
+          <p className={cn("font-medium text-amber-400", textCls)}>Warnings</p>
+          <ul className={cn("mt-0.5 list-none space-y-0.5 text-amber-200/90", textCls)}>
             {interp.warnings.map((w, i) => (
               <li key={i}>{w}</li>
             ))}
@@ -248,7 +268,65 @@ function InterpretationBlock({
   );
 }
 
+/** Rounded amber warnings block for use outside the card (e.g. drawer). */
+export function WarningsBlock({
+  warnings,
+  compact = false,
+}: {
+  warnings: string[];
+  compact?: boolean;
+}) {
+  if (warnings.length === 0) return null;
+  const textCls = compact ? "text-[10px]" : "text-xs";
+  return (
+    <div className={cn("shrink-0 rounded border border-amber-500/01 bg-amber-500/10", compact ? "px-1.5 py-1" : "px-2 py-1.5")}>
+      <p className={cn("font-medium text-amber-400", textCls)}>Warnings</p>
+      <ul className={cn("mt-0.5 list-none space-y-0.5 text-amber-200/90", textCls)}>
+        {warnings.map((w, i) => (
+          <li key={i}>{w}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 const RAIL_ROW_HEIGHT = 24;
+const RAIL_VERTICAL_ROW_HEIGHT = 18;
+
+/** Vertical rail: timeframe label to the left of each dot. For use to the left of the current card. */
+export function AlignmentRailVertical({
+  railMap,
+}: {
+  railMap: Map<string, { stack_aligned: boolean }>;
+}) {
+  return (
+    <div className="flex shrink-0 rounded-lg border border-border bg-card/80 px-2 py-1.5">
+      <div className="flex flex-col justify-center">
+        {TIMEFRAME_ORDER.map((tf) => {
+          const filled = railMap.get(tf)?.stack_aligned ?? false;
+          return (
+            <div
+              key={tf}
+              className="flex items-center gap-0"
+              style={{ height: RAIL_VERTICAL_ROW_HEIGHT }}
+            >
+              <span className="min-w-[1.5rem] text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+                {tf}
+              </span>
+              <span
+                className={`h-2 w-2 shrink-0 rounded-full ${
+                  filled
+                    ? "bg-emerald-400"
+                    : "border border-muted-foreground/50 bg-transparent"
+                }`}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function AlignmentRail({
   railMap,
@@ -305,7 +383,17 @@ export function AlignmentPanel({
   globalBiasBanner,
   loading = false,
   currentTimeframe = null,
+  asOfTimestamp = null,
+  multiTfLayout = "stack",
+  compact = false,
+  hideRail = false,
+  hideWarnings = false,
+  hideCardWrapper = false,
 }: AlignmentPanelProps) {
+  const cardPad = compact ? "p-2" : "p-3";
+  const cardGap = compact ? "gap-2" : "gap-3";
+  const titleSize = compact ? "text-[10px]" : "text-sm";
+  const bodySize = compact ? "text-[10px]" : "text-xs";
   const sortedMultiTf = useMemo(() => {
     if (!multiTfInterpretations?.length) return [];
     const orderIndex = (tf: string) => {
@@ -318,6 +406,7 @@ export function AlignmentPanel({
   }, [multiTfInterpretations]);
 
   const isMultiTf = sortedMultiTf.length > 0;
+  const showRailActual = !hideRail && (currentTimeframe != null || isMultiTf);
 
   const interpByTf = useMemo(() => {
     const m = new Map<string, (typeof sortedMultiTf)[0]>();
@@ -339,31 +428,63 @@ export function AlignmentPanel({
     return m;
   }, [isMultiTf, interpByTf, interpretation, currentTimeframe]);
 
-  const showRail = currentTimeframe != null || isMultiTf;
-
   if (loading) {
+    const loadingContent = (
+      <>
+        <h3 className={cn("font-medium text-foreground", titleSize)}>Alignment</h3>
+        <div className={cn("flex items-center gap-2 text-muted-foreground", bodySize)}>
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-muted-foreground" />
+          Loading…
+        </div>
+      </>
+    );
+    if (hideCardWrapper) {
+      return <div className={cn("flex h-full min-h-0 flex-col", cardGap)}>{loadingContent}</div>;
+    }
     return (
-      <div className="flex gap-3">
-        {showRail && <AlignmentRail railMap={new Map()} />}
-        <div className="flex min-w-0 flex-1 flex-col gap-3 rounded-lg border border-border bg-card p-3">
-          <h3 className="text-sm font-medium text-foreground">Alignment</h3>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-muted-foreground" />
-            Loading…
-          </div>
+      <div className={cn("flex", cardGap)}>
+        {showRailActual && <AlignmentRail railMap={new Map()} />}
+        <div className={cn("flex min-w-0 flex-1 flex-col rounded-lg border border-border bg-card", cardGap, cardPad)}>
+          {loadingContent}
         </div>
       </div>
     );
   }
 
   if (isMultiTf) {
+    const cardContent = (
+      <>
+        {sortedMultiTf.map((interp, i) => (
+          <div
+            key={interp.timeframe ?? i}
+            className={
+              multiTfLayout === "strip"
+                ? "min-w-[200px] shrink-0 rounded border border-border/80 bg-background/50 p-2"
+                : "rounded border border-border/80 bg-background/50 p-2"
+            }
+          >
+            <InterpretationBlock
+              interp={interp}
+              showTimeframe
+              timeframe={interp.timeframe}
+              timestamp={interp.timestamp}
+            />
+          </div>
+        ))}
+      </>
+    );
     return (
       <div className="flex gap-3">
-        <AlignmentRail railMap={railMap} />
+        {showRailActual && <AlignmentRail railMap={railMap} />}
         <div className="flex min-w-0 flex-1 flex-col gap-3 rounded-lg border border-border bg-card p-3">
           <h3 className="text-sm font-medium text-foreground">
             Alignment · Multi-TF
           </h3>
+          {asOfTimestamp && (
+            <p className="text-xs text-muted-foreground">
+              As of {formatTimestampEST(asOfTimestamp)}
+            </p>
+          )}
           {globalBiasBanner && (
             <div
               className={`rounded border px-2 py-1.5 text-xs font-medium ${
@@ -376,20 +497,14 @@ export function AlignmentPanel({
               {globalBiasBanner}
             </div>
           )}
-          <div className="flex flex-col gap-4">
-            {sortedMultiTf.map((interp, i) => (
-              <div
-                key={interp.timeframe ?? i}
-                className="rounded border border-border/80 bg-background/50 p-2"
-              >
-                <InterpretationBlock
-                  interp={interp}
-                  showTimeframe
-                  timeframe={interp.timeframe}
-                  timestamp={interp.timestamp}
-                />
-              </div>
-            ))}
+          <div
+            className={
+              multiTfLayout === "strip"
+                ? "no-scrollbar flex gap-3 overflow-x-auto pb-1"
+                : "flex flex-col gap-4"
+            }
+          >
+            {cardContent}
           </div>
         </div>
       </div>
@@ -397,30 +512,46 @@ export function AlignmentPanel({
   }
 
   if (!interpretation) {
+    const emptyContent = (
+      <>
+        <h3 className={cn("font-medium text-foreground", titleSize)}>Alignment</h3>
+        <p className={cn("text-muted-foreground", bodySize)}>
+          No alignment data. Run Engine 2 for this symbol and timeframe.
+        </p>
+      </>
+    );
+    if (hideCardWrapper) {
+      return <div className={cn("flex h-full min-h-0 flex-col", cardGap)}>{emptyContent}</div>;
+    }
     return (
-      <div className="flex gap-3">
-        {showRail && <AlignmentRail railMap={railMap} />}
-        <div className="flex min-w-0 flex-1 flex-col gap-3 rounded-lg border border-border bg-card p-3">
-          <h3 className="text-sm font-medium text-foreground">Alignment</h3>
-          <p className="text-xs text-muted-foreground">
-            No alignment data. Run Engine 2 for this symbol and timeframe.
-          </p>
+      <div className={cn("flex", cardGap)}>
+        {showRailActual && <AlignmentRail railMap={railMap} />}
+        <div className={cn("flex min-w-0 flex-1 flex-col rounded-lg border border-border bg-card", cardGap, cardPad)}>
+          {emptyContent}
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="flex gap-3">
-      {showRail && <AlignmentRail railMap={railMap} />}
-      <div className="flex min-w-0 flex-1 flex-col gap-3 rounded-lg border border-border bg-card p-3">
+  const cardContent = (
+      <>
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-medium text-foreground">Alignment</h3>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <h3 className={cn("font-medium text-foreground", titleSize)}>Alignment</h3>
+          <span className={cn("uppercase tracking-wider text-muted-foreground", bodySize)}>
             Current
           </span>
         </div>
-        <InterpretationBlock interp={interpretation} />
+        <InterpretationBlock interp={interpretation} compact={compact} hideWarnings={hideWarnings} />
+      </>
+    );
+  if (hideCardWrapper) {
+    return <div className={cn("flex h-full min-h-0 flex-col", cardGap)}>{cardContent}</div>;
+  }
+  return (
+    <div className={cn("flex", cardGap)}>
+      {showRailActual && <AlignmentRail railMap={railMap} />}
+      <div className={cn("flex min-w-0 flex-1 flex-col rounded-lg border border-border bg-card", cardGap, cardPad)}>
+        {cardContent}
       </div>
     </div>
   );

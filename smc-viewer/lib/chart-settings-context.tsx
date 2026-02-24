@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { IndicatorId } from "./smc-types";
 import { INDICATOR_IDS } from "./smc-types";
+import type { ChartBackground as ChartBackgroundType } from "./frame-to-plotly";
 
 const DEFAULT_VISIBILITY: Record<IndicatorId, boolean> = {
   candles: true,
@@ -25,7 +26,7 @@ const DEFAULT_VISIBILITY: Record<IndicatorId, boolean> = {
   sessionsLondon: false,
   sessionsNYAM: false,
   sessionsNYPM: false,
-  retracements: false,
+  retracements: true,
   ewo: true,
   sma5: false,
   sma35: false,
@@ -35,6 +36,8 @@ export interface ChartMeta {
   symbol: string;
   timeframe: string;
 }
+
+export type ChartBackground = ChartBackgroundType;
 
 export interface ChartSettingsState {
   indicatorVisibility: Record<IndicatorId, boolean>;
@@ -52,6 +55,10 @@ export interface ChartSettingsState {
   setSquaredRange: (v: [number, number] | null) => void;
   handleSquareChart: () => void;
   handleClearSquare: () => void;
+  chartBackground: ChartBackground;
+  setChartBackground: (v: ChartBackground) => void;
+  chartBackgroundHex: string;
+  setChartBackgroundHex: (v: string) => void;
 }
 
 const defaultState: ChartSettingsState = {
@@ -70,6 +77,10 @@ const defaultState: ChartSettingsState = {
   setSquaredRange: () => {},
   handleSquareChart: () => {},
   handleClearSquare: () => {},
+  chartBackground: "custom" as ChartBackground,
+  setChartBackground: () => {},
+  chartBackgroundHex: "#282828",
+  setChartBackgroundHex: () => {},
 };
 
 export interface ChartSettingsRegistration {
@@ -96,6 +107,8 @@ export function ChartSettingsProvider({ children }: { children: ReactNode }) {
   const [swingHighInput, setSwingHighInput] = useState("");
   const [logScale, setLogScale] = useState(false);
   const [squaredRange, setSquaredRange] = useState<[number, number] | null>(null);
+  const [chartBackground, setChartBackground] = useState<ChartBackground>("custom");
+  const [chartBackgroundHex, setChartBackgroundHex] = useState<string>("#282828");
 
   const chartCallbacks = useRef<{
     toggleIndicator: (id: IndicatorId) => void;
@@ -150,6 +163,10 @@ export function ChartSettingsProvider({ children }: { children: ReactNode }) {
     setSquaredRange,
     handleSquareChart,
     handleClearSquare,
+    chartBackground,
+    setChartBackground,
+    chartBackgroundHex,
+    setChartBackgroundHex,
     registerChart: useCallback((opts) => {
       chartCallbacks.current = {
         toggleIndicator: opts.toggleIndicator,

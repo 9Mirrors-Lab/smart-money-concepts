@@ -16,6 +16,7 @@ import {
 import {
   ENGINE2_CHECKLIST_STORAGE_KEY,
   defaultChecklistState,
+  getLatestFirstAnalysis,
   type Engine2ChecklistState,
   type AlignmentCoverageResponses,
   type ConfidenceSaturationResponses,
@@ -58,7 +59,7 @@ function useVersionInUse() {
   return versionLabel;
 }
 
-export function Engine2ChecklistContent() {
+export function Engine2ChecklistContent({ fullWidth }: { fullWidth?: boolean } = {}) {
   const [state, setState] = useState<Engine2ChecklistState>(defaultChecklistState);
   const [hydrated, setHydrated] = useState(false);
   const versionInUse = useVersionInUse();
@@ -66,6 +67,12 @@ export function Engine2ChecklistContent() {
   useEffect(() => {
     setState(loadState());
     setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    const onUpdated = () => setState(loadState());
+    window.addEventListener("engine2-checklist-updated", onUpdated);
+    return () => window.removeEventListener("engine2-checklist-updated", onUpdated);
   }, []);
 
   const update = useCallback((patch: Partial<Engine2ChecklistState>) => {
@@ -130,6 +137,8 @@ export function Engine2ChecklistContent() {
     );
   }
 
+  const latestFirstAnalysis = getLatestFirstAnalysis();
+
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -142,19 +151,28 @@ export function Engine2ChecklistContent() {
           variant="secondary"
           size="sm"
           onClick={() => {
-            const seed = {
-              ...engine2ChecklistSeedKcexEthusdt,
-              lastUpdated: new Date().toISOString(),
-            };
+            const latest = getLatestFirstAnalysis();
+            const seed = latest
+              ? {
+                  ...defaultChecklistState,
+                  diagnosticMarkdown: latest.diagnosticMarkdown,
+                  lastUpdated: latest.lastUpdated,
+                }
+              : {
+                  ...engine2ChecklistSeedKcexEthusdt,
+                  lastUpdated: new Date().toISOString(),
+                };
             setState(seed);
             saveState(seed);
           }}
         >
           <FileDown className="mr-2 size-4" />
-          Load first analysis (KCEX_ETHUSDT.P)
+          {latestFirstAnalysis
+            ? `Load first analysis (${latestFirstAnalysis.symbol})`
+            : "Load first analysis (KCEX_ETHUSDT.P)"}
         </Button>
       </div>
-      <div className="w-full max-w-4xl space-y-8">
+      <div className={fullWidth ? "w-full space-y-8" : "w-full max-w-4xl space-y-8"}>
         {/* Diagnostic markdown input */}
         <section className="space-y-2">
           <Label className="text-base font-medium">Engine 2 diagnostic markdown</Label>

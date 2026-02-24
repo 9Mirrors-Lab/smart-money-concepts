@@ -228,7 +228,7 @@ export function Engine2TuneContent() {
                       )}
                     </th>
                   ))}
-                  <th className="w-[72px] pl-2 py-2 text-center font-medium text-muted-foreground">
+                  <th className="min-w-[96px] w-24 pl-2 py-2 text-center font-medium text-muted-foreground">
                     New
                   </th>
                 </tr>
@@ -277,7 +277,7 @@ export function Engine2TuneContent() {
                               step="0.05"
                               min="0"
                               max="1"
-                              className="h-8 w-16 font-mono tabular-nums"
+                              className="h-8 w-24 min-w-24 font-mono tabular-nums"
                               value={formValues[entry.key] ?? ""}
                               onChange={(e) =>
                                 setFormValues((prev) => ({

@@ -88,6 +88,21 @@
   --nav-drawer-active-text: oklch(0.35 0.18 250);
   --nav-drawer-active-desc: oklch(0.45 0.14 195);
   --nav-drawer-hover-bg: oklch(0.94 0.06 330 / 0.35);
+  --nav-drawer-icon-bg: oklch(0.94 0.04 250 / 0.8);
+  --nav-drawer-settings-bg: oklch(0.96 0.015 250 / 0.6);
+  /* Dotted glow: light mode */
+  --color-neutral-500: oklch(0.55 0 0);
+  --color-neutral-600: oklch(0.45 0 0);
+  --color-sky-800: oklch(0.35 0.12 230);
+  /* Gratitude drawer (light fallback) */
+  --gratitude-bg: oklch(0.98 0.02 270);
+  --gratitude-border: oklch(0.75 0.1 195 / 0.5);
+  --gratitude-text: oklch(0.2 0.02 270);
+  --gratitude-muted: oklch(0.45 0.1 195);
+  --gratitude-node: oklch(0.5 0.18 185);
+  --gratitude-node-bg: oklch(0.92 0.04 195 / 0.5);
+  --gratitude-input-bg: oklch(1 0 0);
+  --gratitude-error: oklch(0.55 0.2 25);
 }
 
 .dark {
@@ -130,6 +145,21 @@
   --nav-drawer-active-text: oklch(0.85 0.16 175);
   --nav-drawer-active-desc: oklch(0.72 0.18 145);
   --nav-drawer-hover-bg: oklch(0.22 0.08 330 / 0.4);
+  --nav-drawer-icon-bg: oklch(0.22 0.06 195 / 0.6);
+  --nav-drawer-settings-bg: oklch(0.14 0.02 270 / 0.8);
+  /* Dotted glow: dark mode */
+  --color-neutral-500: oklch(0.55 0 0);
+  --color-neutral-600: oklch(0.45 0 0);
+  --color-sky-800: oklch(0.55 0.15 235);
+  /* Gratitude drawer: deep indigo + teal/cyan nodes (timeline aesthetic) */
+  --gratitude-bg: oklch(0.1 0.03 270);
+  --gratitude-border: oklch(0.28 0.08 195 / 0.4);
+  --gratitude-text: oklch(0.88 0.04 250);
+  --gratitude-muted: oklch(0.58 0.1 195);
+  --gratitude-node: oklch(0.72 0.18 185);
+  --gratitude-node-bg: oklch(0.18 0.06 195 / 0.35);
+  --gratitude-input-bg: oklch(0.14 0.02 270);
+  --gratitude-error: oklch(0.7 0.2 25);
 }
 
 @layer base {
@@ -141,10 +171,31 @@
   }
 }
 
-/* Left nav drawer: neon variety (cyan border, green active, pink hover) */
+/* Left nav drawer: structure and links */
 .nav-drawer-panel {
   background: var(--nav-drawer-bg, oklch(0.145 0 0));
-  border-right: 1px solid var(--nav-drawer-border);
+  border-right: none;
+}
+.nav-drawer-header {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+.nav-section + .nav-section {
+  margin-top: 0;
+}
+.nav-section-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nav-drawer-active-text);
+  opacity: 0.75;
+  margin-bottom: 0.5rem;
+  padding-left: 0.25rem;
+}
+.nav-drawer-panel .nav-link {
+  margin-left: 0;
+  margin-right: 0;
 }
 .nav-drawer-panel .nav-link-active {
   background: var(--nav-drawer-active-bg);
@@ -152,12 +203,458 @@
   color: var(--nav-drawer-active-text);
   box-shadow: 0 0 12px oklch(0.75 0.2 145 / 0.2);
 }
+.nav-drawer-panel .nav-link-active .nav-link-icon {
+  background: var(--nav-drawer-active-bg);
+  color: var(--nav-drawer-active-text);
+}
 .nav-drawer-panel .nav-link-active .nav-link-desc {
   color: var(--nav-drawer-active-desc);
   opacity: 1;
 }
 .nav-drawer-panel .nav-link:not(.nav-link-active):hover {
   background: var(--nav-drawer-hover-bg);
+}
+.nav-drawer-panel .nav-link:not(.nav-link-active):hover .nav-link-icon {
+  background: var(--nav-drawer-hover-bg);
+}
+
+/* App menu drawer: warm dark + amber */
+.app-menu-drawer {
+  --menu-bg: oklch(0.11 0.015 55);
+  --menu-bg-gradient: linear-gradient(
+    180deg,
+    oklch(0.13 0.018 50) 0%,
+    oklch(0.09 0.012 55) 100%
+  );
+  --menu-surface: oklch(0.16 0.02 55);
+  --menu-surface-hover: oklch(0.19 0.022 55);
+  --menu-text: oklch(0.94 0.01 80);
+  --menu-muted: oklch(0.52 0.02 75);
+  --menu-border: oklch(0.24 0.03 60);
+  --menu-accent: oklch(0.72 0.16 75);
+  --menu-accent-foreground: oklch(0.14 0.04 75);
+  --menu-accent-glow: oklch(0.72 0.16 75 / 0.25);
+  --menu-font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  /* No background here — background lives on .menu-nav-column only */
+  background: transparent;
+  color: var(--menu-text);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+/* Left nav column owns the dark background — flyout area to its right stays transparent */
+.app-menu-drawer .menu-nav-column {
+  background: var(--menu-bg);
+  background-image: var(--menu-bg-gradient);
+  box-shadow: 8px 0 32px 0 oklch(0 0 0 / 0.55);
+}
+/* Inner wrapper: no background so flyout area is see-through */
+.app-menu-drawer .menu-drawer-inner {
+  background: transparent;
+}
+.app-menu-drawer .menu-header {
+  background: oklch(0.09 0.01 55 / 0.8);
+  border-bottom-color: var(--menu-border);
+}
+.app-menu-drawer .menu-segmented {
+  display: flex;
+  gap: 0;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--menu-surface);
+  border: 1px solid var(--menu-border);
+  font-family: var(--menu-font-mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+.app-menu-drawer .menu-segmented-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.4rem 0.75rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--menu-muted);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.app-menu-drawer .menu-segmented-btn:hover {
+  color: var(--menu-text);
+  background: var(--menu-surface-hover);
+}
+.app-menu-drawer .menu-segmented-btn[data-state="on"] {
+  background: var(--menu-accent);
+  color: var(--menu-accent-foreground);
+  box-shadow:
+    0 0 0 1px var(--menu-border),
+    0 2px 8px var(--menu-accent-glow);
+}
+.app-menu-drawer .menu-segmented-icon {
+  opacity: 0.9;
+}
+.app-menu-drawer .menu-close {
+  color: var(--menu-muted) !important;
+  background: transparent !important;
+}
+.app-menu-drawer .menu-close:hover {
+  color: var(--menu-text) !important;
+  background: var(--menu-surface) !important;
+}
+.app-menu-drawer .menu-section-title {
+  font-family: var(--menu-font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--menu-muted);
+  margin-bottom: 0.5rem;
+  padding-left: 2px;
+}
+.app-menu-drawer .menu-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.app-menu-drawer .menu-link {
+  color: var(--menu-text);
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+.app-menu-drawer .menu-link:hover {
+  background: var(--menu-surface-hover);
+}
+.app-menu-drawer .menu-link-active {
+  background: var(--menu-surface);
+  border-color: var(--menu-border);
+  border-left: 3px solid var(--menu-accent);
+  color: var(--menu-text);
+  box-shadow: 0 0 20px var(--menu-accent-glow);
+}
+.app-menu-drawer .menu-link-active .menu-link-desc {
+  color: var(--menu-muted);
+}
+.app-menu-drawer .menu-link-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--menu-surface);
+  color: var(--menu-muted);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.app-menu-drawer .menu-link-active .menu-link-icon {
+  background: oklch(0.2 0.04 75 / 0.6);
+  color: var(--menu-accent);
+}
+.app-menu-drawer .menu-link:hover .menu-link-icon {
+  background: var(--menu-surface-hover);
+  color: var(--menu-text);
+}
+.app-menu-drawer .menu-link-setting {
+  outline: none;
+}
+.app-menu-drawer .menu-link-setting:focus-visible {
+  box-shadow: 0 0 0 2px var(--menu-accent-glow);
+}
+/* Flyout: transparent — no background painted above/below the content */
+.app-menu-drawer .menu-flyout {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+/* Strip backgrounds from layout containers inside the flyout (panels, cards, wrappers) */
+/* Exclude interactive elements: checkboxes, buttons, inputs — those need their own fills */
+.app-menu-drawer .menu-flyout div,
+.app-menu-drawer .menu-flyout section,
+.app-menu-drawer .menu-flyout article,
+.app-menu-drawer .menu-flyout aside,
+.app-menu-drawer .menu-flyout header,
+.app-menu-drawer .menu-flyout main {
+  background-color: transparent !important;
+}
+/* Keep menu-surface for explicit menu-settings-card elements inside flyout */
+.app-menu-drawer .menu-flyout .menu-settings-card {
+  background: var(--menu-surface) !important;
+}
+.app-menu-drawer .menu-flyout-inner .menu-settings-title {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--menu-border);
+}
+.app-menu-drawer .menu-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.app-menu-drawer .menu-settings-card {
+  padding: 1rem 1.25rem;
+  border-radius: 14px;
+  background: var(--menu-surface);
+  border: 1px solid var(--menu-border);
+}
+.app-menu-drawer .menu-settings-title {
+  font-family: var(--menu-font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--menu-muted);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--menu-border);
+}
+.app-menu-drawer .menu-settings-desc {
+  font-size: 0.8125rem;
+  color: var(--menu-muted);
+  margin-bottom: 0.75rem;
+  line-height: 1.4;
+}
+.app-menu-drawer .menu-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1rem;
+}
+.app-menu-drawer .menu-label {
+  font-size: 0.75rem;
+  color: var(--menu-muted);
+  font-weight: 500;
+}
+.app-menu-drawer .menu-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border-radius: 8px;
+  border: 1px solid var(--menu-border);
+  background: var(--menu-bg);
+  color: var(--menu-text);
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.app-menu-drawer .menu-input::placeholder {
+  color: var(--menu-muted);
+  opacity: 0.8;
+}
+.app-menu-drawer .menu-input:focus {
+  border-color: var(--menu-accent);
+  box-shadow: 0 0 0 2px var(--menu-accent-glow);
+}
+.app-menu-drawer .menu-btn-primary {
+  background: var(--menu-accent) !important;
+  color: var(--menu-accent-foreground) !important;
+  border-color: transparent !important;
+}
+.app-menu-drawer .menu-btn-primary:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 0 16px var(--menu-accent-glow);
+}
+.app-menu-drawer .menu-btn-secondary {
+  border-color: var(--menu-border) !important;
+  color: var(--menu-text) !important;
+  background: transparent !important;
+}
+.app-menu-drawer .menu-btn-secondary:hover {
+  background: var(--menu-surface-hover) !important;
+}
+.app-menu-drawer .menu-checkbox-label {
+  font-size: 0.8125rem;
+  color: var(--menu-text);
+  cursor: pointer;
+}
+/* Inherit menu theme for nested panels (IndicatorPanel, ExportPanel, TimeConverter) */
+/* Scope to the nav column only — NOT inside .menu-flyout, which must stay transparent */
+.app-menu-drawer
+  :not(.menu-flyout, .menu-flyout *)
+  [data-slot="accordion-item"],
+.app-menu-drawer :not(.menu-flyout, .menu-flyout *) .rounded-lg.border {
+  border-color: var(--menu-border) !important;
+  background: var(--menu-surface) !important;
+}
+.app-menu-drawer :not(.menu-flyout, .menu-flyout *) .border-border {
+  border-color: var(--menu-border) !important;
+}
+.app-menu-drawer :not(.menu-flyout, .menu-flyout *) .bg-card {
+  background: var(--menu-surface) !important;
+}
+.app-menu-drawer .text-foreground {
+  color: var(--menu-text) !important;
+}
+.app-menu-drawer .text-muted-foreground {
+  color: var(--menu-muted) !important;
+}
+.app-menu-drawer input:not(.menu-input) {
+  border-color: var(--menu-border);
+  background: var(--menu-bg);
+  color: var(--menu-text);
+}
+.app-menu-drawer input:not(.menu-input):focus {
+  border-color: var(--menu-accent);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--menu-accent-glow);
+}
+.app-menu-drawer [data-slot="checkbox"][data-state="checked"] {
+  background: var(--menu-accent) !important;
+  border-color: var(--menu-accent) !important;
+  color: var(--menu-accent-foreground) !important;
+}
+
+/* ── Indicator Panel: warm palette, soft glow, lighter surfaces ───────────── */
+.app-menu-drawer .indicator-panel {
+  --indicator-active: var(--menu-accent);
+  --indicator-glow: oklch(0.72 0.14 75 / 0.12);
+  --indicator-glass: oklch(0.20 0.02 75);
+  --indicator-glass-border: oklch(0.26 0.03 75);
+  --indicator-glass-hover: oklch(0.24 0.04 75);
+  --indicator-glass-border-hover: oklch(0.32 0.06 75);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.app-menu-drawer .indicator-panel-heading {
+  font-family: var(--menu-font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--menu-text);
+}
+/* Candles only: distinct action button (outline, not a toggle) */
+.app-menu-drawer .indicator-candles-only-btn {
+  font-family: var(--menu-font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+  color: var(--menu-muted);
+  background: var(--indicator-glass);
+  border: 1px solid var(--indicator-glass-border);
+  border-radius: 6px;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+}
+.app-menu-drawer .indicator-candles-only-btn:hover {
+  background: var(--indicator-glass-hover);
+  border-color: var(--indicator-glass-border-hover);
+  color: var(--menu-text);
+}
+.app-menu-drawer .indicator-candles-only-btn:focus-visible {
+  outline: 2px solid var(--menu-accent-glow);
+  outline-offset: 2px;
+}
+.app-menu-drawer .indicator-group-title {
+  font-family: var(--menu-font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--menu-text);
+  margin-bottom: 0.125rem;
+}
+.app-menu-drawer .indicator-pill {
+  cursor: pointer;
+  outline: none;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  border-width: 1px;
+}
+.app-menu-drawer .indicator-pill:focus-visible {
+  outline: 2px solid var(--menu-accent-glow);
+  outline-offset: 1px;
+}
+/* Off: lighter glass, readable */
+.app-menu-drawer .indicator-pill-off {
+  background: var(--indicator-glass);
+  border-color: var(--indicator-glass-border);
+  color: oklch(0.88 0.01 80);
+}
+.app-menu-drawer .indicator-pill-off:hover {
+  background: var(--indicator-glass-hover);
+  border-color: var(--indicator-glass-border-hover);
+  color: oklch(0.95 0.01 80);
+}
+.app-menu-drawer .indicator-pill-off .indicator-label {
+  color: inherit;
+}
+/* Dot: off = ring, on = filled + subtle glow */
+.app-menu-drawer .indicator-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+}
+.app-menu-drawer .indicator-dot-off {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px oklch(0.5 0.02 75 / 0.5);
+}
+.app-menu-drawer .indicator-pill-off:hover .indicator-dot-off {
+  box-shadow: inset 0 0 0 1px oklch(0.6 0.04 75 / 0.7);
+}
+.app-menu-drawer .indicator-dot-on {
+  background: var(--indicator-active);
+  box-shadow: 0 0 0 1px oklch(0.6 0.14 75 / 0.35), 0 0 6px 0 var(--indicator-glow);
+}
+.app-menu-drawer .indicator-pill-on:hover .indicator-dot-on {
+  box-shadow: 0 0 0 1px oklch(0.6 0.14 75 / 0.45), 0 0 8px 1px var(--indicator-glow);
+}
+/* On: warm fill, soft glow only */
+.app-menu-drawer .indicator-pill-on {
+  background: oklch(0.34 0.06 75 / 0.75);
+  border-color: oklch(0.5 0.12 75 / 0.6);
+  color: oklch(0.95 0.02 80);
+  box-shadow: 0 0 0 1px oklch(0.45 0.1 75 / 0.3), 0 0 8px -2px var(--indicator-glow);
+}
+.app-menu-drawer .indicator-pill-on .indicator-label {
+  color: inherit;
+}
+.app-menu-drawer .indicator-pill-on:hover {
+  background: oklch(0.38 0.07 75 / 0.8);
+  border-color: oklch(0.55 0.12 75 / 0.7);
+  box-shadow: 0 0 0 1px oklch(0.5 0.12 75 / 0.35), 0 0 10px -1px var(--indicator-glow);
+}
+@keyframes indicator-glow-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.9; }
+}
+.app-menu-drawer .indicator-pill-on .indicator-dot-on {
+  animation: indicator-glow-pulse 2.5s ease-in-out infinite;
+}
+.app-menu-drawer .indicator-sessions .indicator-pill {
+  min-width: 0;
+}
+
+
+/* Dotted glow: full-width in bottom area so effect shows in blank space (incl. right side when flyout open) */
+.app-menu-drawer .menu-glow-zone-full {
+  isolation: isolate;
+}
+.app-menu-drawer .menu-glow-fade {
+  /* Vertical fade: invisible at top, fully visible at bottom */
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    white 40%,
+    white 100%
+  );
+  mask-mode: luminance;
+  mask-size: 100% 100%;
+  mask-position: 0 0;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    white 40%,
+    white 100%
+  );
+  -webkit-mask-mode: luminance;
+  -webkit-mask-size: 100% 100%;
+  -webkit-mask-position: 0 0;
 }
 
 /* Side ribbons (left ∞, right Ω): 3D depth, move OUT on hover */
@@ -172,7 +669,12 @@
   ) !important;
   border-color: var(--ribbon-edge) !important;
   color: var(--nav-drawer-active-text);
-  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.22s ease-out, color 0.2s ease, border-color 0.2s ease, filter 0.2s ease;
+  transition:
+    transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.22s ease-out,
+    color 0.2s ease,
+    border-color 0.2s ease,
+    filter 0.2s ease;
   box-shadow:
     inset 2px 2px 0 oklch(0.35 0.06 195 / 0.25),
     inset 0 1px 0 oklch(0.3 0.05 195 / 0.15),
@@ -189,19 +691,56 @@
     inset 1px 1px 0 oklch(0.4 0.08 195 / 0.2),
     inset -1px -1px 2px oklch(0 0 0 / 0.35),
     4px 8px 20px oklch(0 0 0 / 0.5),
-    0 0 18px oklch(0.6 0.16 195 / 0.25);
+    0 0 12px oklch(0.7 0.18 330 / 0.12);
+}
+/* Left ribbon (drawer trigger): match card background and border */
+.nav-tab-trigger-left {
+  background: var(--card) !important;
+  border-color: var(--border) !important;
 }
 .nav-tab-trigger-left:hover {
+  background: var(--card) !important;
+  border-color: var(--border) !important;
   transform: translateX(4px) scale(1.04);
 }
 .nav-tab-trigger-left:active {
+  background: var(--card) !important;
+  border-color: var(--border) !important;
   transform: translateX(2px) scale(1.01);
 }
+/* Expand (initial rollover): change --ribbon-expand-duration to slow/speed up only the move right */
+/* Ribbon next to card: match card background and border */
+.nav-tab-trigger-right {
+  --ribbon-expand-duration: 0.5s;
+  width: 11px;
+  min-width: 11px;
+  background: var(--card) !important;
+  border-color: var(--border) !important;
+  transition:
+    width var(--ribbon-expand-duration) cubic-bezier(0.45, 0, 0.55, 1),
+    box-shadow 0.22s ease-out,
+    color 0.2s ease,
+    border-color 0.2s ease,
+    filter 0.2s ease;
+}
+/* Retract (mouse leave): fixed 0.32s so only expand speed is controlled by --ribbon-expand-duration */
 .nav-tab-trigger-right:hover {
-  transform: translateX(-4px) scale(1.04);
+  width: 20px;
+  min-width: 20px;
+  background: var(--card) !important;
+  border-color: var(--border) !important;
+  transition: width 0.32s cubic-bezier(0.33, 1, 0.68, 1) !important;
+  box-shadow:
+    0.22s ease-out,
+    color 0.2s ease,
+    border-color 0.2s ease,
+    filter 0.2s ease;
 }
 .nav-tab-trigger-right:active {
-  transform: translateX(-2px) scale(1.01);
+  width: 16px;
+  min-width: 16px;
+  background: var(--card) !important;
+  border-color: var(--border) !important;
 }
 .nav-tab-trigger:active {
   box-shadow:
@@ -233,7 +772,12 @@
   border-left: 1px solid var(--pi-ribbon-edge) !important;
   border-right: 1px solid var(--pi-ribbon-edge) !important;
   color: var(--pi-glow);
-  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.22s ease-out, color 0.2s ease, border-color 0.2s ease, filter 0.2s ease;
+  transition:
+    transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.22s ease-out,
+    color 0.2s ease,
+    border-color 0.2s ease,
+    filter 0.2s ease;
   box-shadow:
     inset 0 2px 0 oklch(0.4 0.08 330 / 0.3),
     inset 2px 2px 4px oklch(0.25 0.04 330 / 0.2),
@@ -266,24 +810,267 @@
   font-style: italic;
   letter-spacing: -0.02em;
   text-shadow: 0 0 10px oklch(0.75 0.2 330 / 0.5);
-  transition: text-shadow 0.22s ease-out, transform 0.22s ease-out;
+  transition:
+    text-shadow 0.22s ease-out,
+    transform 0.22s ease-out;
 }
 .nav-tab-trigger-top:hover .pi-icon {
   transform: scale(1.12);
-  text-shadow: 0 0 12px oklch(0.78 0.18 330 / 0.6), 0 0 20px oklch(0.65 0.14 330 / 0.3);
+  text-shadow:
+    0 0 12px oklch(0.78 0.18 330 / 0.6),
+    0 0 20px oklch(0.65 0.14 330 / 0.3);
+}
+
+/* Bottom ribbon (bee / multi-TF): amber–honey theme, tab sticks up from bottom */
+.nav-tab-trigger-bottom {
+  --bee-ribbon-edge: oklch(0.55 0.12 85 / 0.5);
+  --bee-glow: oklch(0.82 0.16 85);
+  background: linear-gradient(
+    0deg,
+    oklch(0.25 0.05 85) 0%,
+    oklch(0.18 0.05 75) 35%,
+    oklch(0.14 0.04 70) 65%,
+    oklch(0.08 0.02 65) 100%
+  ) !important;
+  border: none !important;
+  border-top: 1px solid var(--bee-ribbon-edge) !important;
+  border-left: 1px solid var(--bee-ribbon-edge) !important;
+  border-right: 1px solid var(--bee-ribbon-edge) !important;
+  color: var(--bee-glow);
+  transition:
+    transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.22s ease-out,
+    color 0.2s ease,
+    border-color 0.2s ease,
+    filter 0.2s ease;
+  box-shadow:
+    inset 0 -2px 0 oklch(0.42 0.1 85 / 0.3),
+    inset 2px 2px 4px oklch(0.22 0.04 85 / 0.2),
+    inset -2px -2px 6px oklch(0 0 0 / 0.5),
+    inset 0 1px 2px oklch(0 0 0 / 0.3),
+    0 -4px 14px oklch(0 0 0 / 0.45),
+    0 0 0 1px oklch(0.28 0.06 85 / 0.25);
+}
+.nav-tab-trigger-bottom:hover {
+  --bee-ribbon-edge: oklch(0.6 0.14 85 / 0.5);
+  color: oklch(0.92 0.14 85);
+  transform: translateX(4px) scale(1.04);
+  filter: brightness(1.06);
+  box-shadow:
+    inset 0 1px 0 oklch(0.45 0.1 85 / 0.25),
+    inset -1px -1px 3px oklch(0 0 0 / 0.35),
+    0 -8px 24px oklch(0 0 0 / 0.5),
+    0 0 16px oklch(0.72 0.16 85 / 0.22);
+}
+.nav-tab-trigger-bottom:active {
+  transform: translateX(2px) scale(1.01);
+  box-shadow:
+    inset 0 2px 6px oklch(0 0 0 / 0.5),
+    0 3px 10px oklch(0 0 0 / 0.4);
+}
+.nav-tab-trigger-bottom svg {
+  transition: transform 0.22s ease-out;
+}
+.nav-tab-trigger-bottom:hover svg {
+  transform: scale(1.12);
+}
+
+/* Gratitude ribbon: same treatment as nav-tab-trigger-right (expand, 3D, glow); teal icon only */
+.nav-tab-trigger-right.gratitude-ribbon svg {
+  color: var(--gratitude-node);
+  transition: transform 0.25s ease-out;
+}
+.nav-tab-trigger-right.gratitude-ribbon:hover svg {
+  color: oklch(0.85 0.18 185);
+  transform: scale(1.1);
+}
+
+/* Gratitude drawer: timeline rail + glowing nodes (teal/indigo inspiration) */
+.gratitude-drawer .gratitude-timeline {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.gratitude-drawer .gratitude-timeline-item {
+  list-style: none;
+}
+.gratitude-drawer .gratitude-node-dot {
+  box-shadow:
+    0 0 0 2px var(--gratitude-bg),
+    0 0 0 3px oklch(0.72 0.18 185 / 0.35),
+    0 0 10px oklch(0.72 0.18 185 / 0.5);
+}
+.gratitude-drawer .gratitude-timeline ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-left-color: oklch(0.72 0.18 185 / 0.25);
+}
+.gratitude-drawer .gratitude-timeline-item-selected .gratitude-node-dot {
+  box-shadow:
+    0 0 0 2px var(--gratitude-bg),
+    0 0 0 3px oklch(0.72 0.18 185 / 0.6),
+    0 0 14px oklch(0.72 0.18 185 / 0.7);
+}
+
+/* Gratitude stream: horizontal nodes with concentric rings + connectors */
+.gratitude-stream-wrap {
+  min-height: 120px;
+  background: linear-gradient(
+    180deg,
+    oklch(0.14 0.04 270 / 0.35) 0%,
+    transparent 100%
+  );
+}
+.gratitude-view-toggle {
+  color: var(--gratitude-node);
+}
+.gratitude-view-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px oklch(0.72 0.18 185 / 0.5);
+  border-radius: 50%;
+}
+.gratitude-seed-wrap {
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gratitude-stream {
+  align-items: center;
+  justify-content: flex-start;
+}
+/* Vesica piscis: each node is a full circle. Alternating colors: A = rgb(110,150,130), B = rgb(175,80,95). */
+.gratitude-stream-vesica .gratitude-stream-node-vesica {
+  border: 1px solid rgb(110 150 130 / 0.5);
+  border-radius: 50%;
+  background: rgb(110 150 130 / 0.22);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 0 0 0 rgb(110 150 130 / 0);
+}
+.gratitude-stream-vesica .gratitude-stream-node-vesica:hover {
+  transform: scale(1.05);
+  border-color: rgb(110 150 130 / 0.7);
+  background: rgb(110 150 130 / 0.35);
+  box-shadow: 0 0 14px rgb(110 150 130 / 0.3);
+}
+.gratitude-stream-vesica .gratitude-stream-node-vesica:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(110 150 130 / 0.6);
+}
+.gratitude-stream-vesica .gratitude-stream-node-color-b {
+  border-color: rgb(175 80 95 / 0.5);
+  background: rgb(175 80 95 / 0.22);
+  box-shadow: 0 0 0 0 rgb(175 80 95 / 0);
+}
+.gratitude-stream-vesica .gratitude-stream-node-color-b:hover {
+  border-color: rgb(175 80 95 / 0.7);
+  background: rgb(175 80 95 / 0.35);
+  box-shadow: 0 0 14px rgb(175 80 95 / 0.3);
+}
+.gratitude-stream-vesica .gratitude-stream-node-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(110 150 130);
+  box-shadow: 0 0 10px rgb(110 150 130 / 0.5);
+  pointer-events: none;
+  opacity: 0.2;
+}
+.gratitude-stream-vesica .gratitude-stream-node-color-b .gratitude-stream-node-dot {
+  background: rgb(175 80 95);
+  box-shadow: 0 0 10px rgb(175 80 95 / 0.5);
+  
+}
+.gratitude-stream-vesica .gratitude-stream-node-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid oklch(0.72 0.18 185 / 0.22);
+  pointer-events: none;
+}
+.gratitude-stream-vesica .gratitude-stream-node-ring-outer {
+  width: 36px;
+  height: 36px;
+  opacity: 0.7;
+}
+.gratitude-stream-vesica .gratitude-stream-node-ring-mid {
+  width: 22px;
+  height: 22px;
+  opacity: 0.55;
+}
+.gratitude-stream-vesica .gratitude-stream-node-selected {
+  border-color: rgb(110 150 130 / 0.9);
+  box-shadow: 0 0 14px rgb(110 150 130 / 0.5);
+}
+.gratitude-stream-vesica .gratitude-stream-node-color-b.gratitude-stream-node-selected {
+  border-color: rgb(175 80 95 / 0.9);
+  box-shadow: 0 0 14px rgb(175 80 95 / 0.5);
+}
+.gratitude-stream-vesica .gratitude-stream-node-ripple {
+  animation: gratitude-vesica-ripple 0.8s ease-out forwards;
+}
+@keyframes gratitude-vesica-ripple {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.6;
+  }
+  60% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Right-drawer tab row: top frame of card — rounded top, square bottom, flat */
+.drawer-tab-ribbon {
+  --drawer-ribbon-edge: oklch(0.5 0.14 195 / 0.5);
+  margin-top: 2px;
+  background: linear-gradient(
+    145deg,
+    oklch(0.26 0.05 195) 0%,
+    oklch(0.16 0.04 195) 40%,
+    oklch(0.1 0.02 195) 70%,
+    oklch(0.06 0.01 195) 100%
+  );
+  border: none;
+  border-top: 1px solid var(--drawer-ribbon-edge);
+  border-left: 1px solid var(--drawer-ribbon-edge);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0.5rem 0.5rem 0 0; /* match card rounded-lg, square bottom */
+  box-shadow: none;
+  color: oklch(0.88 0.14 195);
+}
+.drawer-tab-ribbon svg {
+  color: oklch(0.88 0.14 195);
 }
 
 /* Ribbon extras: breathing glow, focus ring, reduced motion */
 @keyframes ribbon-idle-glow {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 .nav-tab-trigger,
-.nav-tab-trigger-top {
+.nav-tab-trigger-top,
+.nav-tab-trigger-bottom {
   position: relative;
 }
 .nav-tab-trigger::before,
-.nav-tab-trigger-top::before {
+.nav-tab-trigger-top::before,
+.nav-tab-trigger-bottom::before {
   content: "";
   position: absolute;
   inset: -3px;
@@ -292,16 +1079,35 @@
   z-index: -1;
   animation: ribbon-idle-glow 3s ease-in-out infinite;
 }
+/* Side ribbons (left/right): soft neon magenta halo instead of teal blob */
 .nav-tab-trigger::before {
-  background: radial-gradient(ellipse 80% 80% at 50% 50%, oklch(0.6 0.18 195 / 0.2) 0%, transparent 70%);
+  background: radial-gradient(
+    ellipse 100% 100% at 50% 50%,
+    oklch(0.75 0.2 330 / 0.06) 0%,
+    oklch(0.7 0.16 330 / 0.02) 45%,
+    transparent 70%
+  );
 }
 .nav-tab-trigger-top::before {
-  background: radial-gradient(ellipse 80% 80% at 50% 50%, oklch(0.65 0.2 330 / 0.18) 0%, transparent 70%);
+  background: radial-gradient(
+    ellipse 80% 80% at 50% 50%,
+    oklch(0.65 0.2 330 / 0.18) 0%,
+    transparent 70%
+  );
+}
+.nav-tab-trigger-bottom::before {
+  background: radial-gradient(
+    ellipse 80% 80% at 50% 50%,
+    oklch(0.68 0.16 85 / 0.18) 0%,
+    transparent 70%
+  );
 }
 .nav-tab-trigger:hover::before,
 .nav-tab-trigger-top:hover::before,
+.nav-tab-trigger-bottom:hover::before,
 .nav-tab-trigger:focus-visible::before,
-.nav-tab-trigger-top:focus-visible::before {
+.nav-tab-trigger-top:focus-visible::before,
+.nav-tab-trigger-bottom:focus-visible::before {
   animation: none;
   opacity: 1;
 }
@@ -327,9 +1133,21 @@
     0 0 0 2px oklch(0.72 0.2 330),
     0 0 20px oklch(0.65 0.18 330 / 0.35);
 }
+.nav-tab-trigger-bottom:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 -2px 0 oklch(0.4 0.08 85 / 0.3),
+    inset 2px 2px 4px oklch(0.22 0.04 85 / 0.2),
+    inset -2px -2px 6px oklch(0 0 0 / 0.5),
+    inset 0 1px 2px oklch(0 0 0 / 0.3),
+    0 -4px 14px oklch(0 0 0 / 0.45),
+    0 0 0 2px oklch(0.72 0.16 85),
+    0 0 20px oklch(0.68 0.16 85 / 0.35);
+}
 @media (prefers-reduced-motion: reduce) {
   .nav-tab-trigger,
-  .nav-tab-trigger-top {
+  .nav-tab-trigger-top,
+  .nav-tab-trigger-bottom {
     transition-duration: 0.01ms;
     animation: none;
   }
@@ -347,6 +1165,20 @@
     transform: none;
   }
   .nav-tab-trigger-top:hover .pi-icon {
+    transform: none;
+  }
+  .nav-tab-trigger-bottom:hover,
+  .nav-tab-trigger-bottom:active {
+    transform: none;
+  }
+  .nav-tab-trigger-bottom:hover svg {
+    transform: none;
+  }
+  .gratitude-ribbon:hover,
+  .gratitude-ribbon:active {
+    transform: none;
+  }
+  .gratitude-ribbon:hover svg {
     transform: none;
   }
 }

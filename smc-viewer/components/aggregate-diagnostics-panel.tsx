@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { DiagnosticsApiResult } from "@/components/diagnostics-panel";
+import { saveLatestFirstAnalysis, saveLoadedAnalysisResults } from "@/lib/engine2-checklist-types";
 import { getConfig, type Engine2LogicConfig } from "@/lib/engine2-logic-config";
 import { getActiveOverrides, getActiveOverridesQueryFragment } from "@/lib/engine2-version-store";
 import { Lock, Ban, ChevronDown, ChevronRight } from "lucide-react";
@@ -349,9 +350,16 @@ export const AggregateDiagnosticsPanel = forwardRef<
       })
     ).then((pairs) => {
       const next: Record<string, RowState> = {};
-      for (const { tf, result } of pairs) next[tf] = result;
+      const resultsRecord: Record<string, DiagnosticsApiResult> = {};
+      for (const { tf, result } of pairs) {
+        next[tf] = result;
+        if (result && "data" in result) resultsRecord[tf] = result.data;
+      }
       setRows(next);
       setLoading(false);
+      const md = buildGridMarkdown(next, symbol);
+      saveLatestFirstAnalysis(md, symbol);
+      saveLoadedAnalysisResults({ symbol, results: resultsRecord, diagnosticMarkdown: md });
     });
   }, [symbol]);
 

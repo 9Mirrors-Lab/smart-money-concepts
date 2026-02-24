@@ -3,11 +3,13 @@
 import { Suspense, useState } from "react";
 import { Drawer, DrawerTrigger } from "@/components/ui/drawer";
 import { LeftNavDrawer } from "@/components/left-nav-drawer";
+import { GratitudeDrawer, GratitudeRibbon } from "@/components/gratitude-drawer";
 import { Button } from "@/components/ui/button";
 import { Infinity } from "lucide-react";
 
 export function NavWrapper({ children }: { children: React.ReactNode }) {
   const [navOpen, setNavOpen] = useState(false);
+  const [gratitudeOpen, setGratitudeOpen] = useState(false);
 
   return (
     <>
@@ -28,6 +30,15 @@ export function NavWrapper({ children }: { children: React.ReactNode }) {
             <LeftNavDrawer open={navOpen} onOpenChange={setNavOpen} />
           </Suspense>
         </Drawer>
+      </div>
+      <div className="fixed bottom-24 right-0 z-40">
+        <GratitudeDrawer
+          open={gratitudeOpen}
+          onOpenChange={setGratitudeOpen}
+          trigger={
+            <GratitudeRibbon open={gratitudeOpen} onOpenChange={setGratitudeOpen} />
+          }
+        />
       </div>
       <div className="min-h-0 flex-1">{children}</div>
     </>

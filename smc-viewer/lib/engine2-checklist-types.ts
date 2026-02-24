@@ -5,6 +5,89 @@
 
 export const ENGINE2_CHECKLIST_STORAGE_KEY = "engine2-checklist-responses";
 
+/** Storage for the most recent "Run all timeframes" result; used by "Load first analysis". */
+export const ENGINE2_FIRST_ANALYSIS_LATEST_KEY = "engine2-first-analysis-latest";
+
+/** Storage for raw loaded analysis results (per-TF diagnostics); used by "Update checklist" on Evaluate. */
+export const ENGINE2_LOADED_ANALYSIS_RESULTS_KEY = "engine2-loaded-analysis-results";
+
+export interface LoadedAnalysisResults {
+  symbol: string;
+  /** Per-timeframe diagnostics; shape matches DiagnosticsApiResult. */
+  results: Record<string, unknown>;
+  diagnosticMarkdown?: string;
+  lastUpdated: string;
+}
+
+export function saveLoadedAnalysisResults(payload: Omit<LoadedAnalysisResults, "lastUpdated">): void {
+  if (typeof window === "undefined") return;
+  try {
+    const full: LoadedAnalysisResults = {
+      ...payload,
+      lastUpdated: new Date().toISOString(),
+    };
+    localStorage.setItem(ENGINE2_LOADED_ANALYSIS_RESULTS_KEY, JSON.stringify(full));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getLoadedAnalysisResults(): LoadedAnalysisResults | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(ENGINE2_LOADED_ANALYSIS_RESULTS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as LoadedAnalysisResults;
+    return parsed?.symbol && parsed?.results && typeof parsed.results === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Write checklist state to storage and notify listeners (e.g. Evaluate panel). */
+export function writeChecklistStateAndNotify(state: Engine2ChecklistState): void {
+  if (typeof window === "undefined") return;
+  try {
+    const toSave = { ...state, lastUpdated: new Date().toISOString() };
+    localStorage.setItem(ENGINE2_CHECKLIST_STORAGE_KEY, JSON.stringify(toSave));
+    window.dispatchEvent(new CustomEvent("engine2-checklist-updated"));
+  } catch {
+    /* ignore */
+  }
+}
+
+export interface FirstAnalysisLatest {
+  diagnosticMarkdown: string;
+  symbol: string;
+  lastUpdated: string;
+}
+
+export function saveLatestFirstAnalysis(markdown: string, symbol: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const payload: FirstAnalysisLatest = {
+      diagnosticMarkdown: markdown,
+      symbol,
+      lastUpdated: new Date().toISOString(),
+    };
+    localStorage.setItem(ENGINE2_FIRST_ANALYSIS_LATEST_KEY, JSON.stringify(payload));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getLatestFirstAnalysis(): FirstAnalysisLatest | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(ENGINE2_FIRST_ANALYSIS_LATEST_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as FirstAnalysisLatest;
+    return parsed?.diagnosticMarkdown && parsed?.symbol ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Section 1: Alignment State Coverage */
 export interface AlignmentCoverageResponses {
   strongAppears5To10: boolean;

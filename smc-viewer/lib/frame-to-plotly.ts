@@ -12,6 +12,9 @@ export type PlotlyShape = Record<string, unknown>;
 /** Plotly annotation */
 export type PlotlyAnnotation = Record<string, unknown>;
 
+/** Chart background theme for panel 1 (main price chart). */
+export type ChartBackground = "dark" | "light" | "mid" | "custom";
+
 const DARK_LAYOUT = {
   paper_bgcolor: "rgba(40, 40, 40, 1)",
   plot_bgcolor: "rgba(40, 40, 40, 1)",
@@ -36,6 +39,130 @@ const DARK_LAYOUT = {
   },
   showlegend: false,
 };
+
+const LIGHT_LAYOUT = {
+  ...DARK_LAYOUT,
+  paper_bgcolor: "rgba(250, 250, 250, 1)",
+  plot_bgcolor: "rgba(250, 250, 250, 1)",
+  font: { color: "rgba(30, 30, 30, 1)" },
+  xaxis: {
+    ...DARK_LAYOUT.xaxis,
+    tickfont: { color: "rgba(60, 60, 60, 0.9)", size: 10 },
+    gridcolor: "rgba(0, 0, 0, 0.08)",
+  },
+  yaxis: {
+    ...DARK_LAYOUT.yaxis,
+    tickfont: { color: "rgba(60, 60, 60, 0.9)", size: 10 },
+    gridcolor: "rgba(0, 0, 0, 0.08)",
+    title: { text: "Price", font: { color: "rgba(60, 60, 60, 0.9)", size: 10 } },
+  },
+};
+
+const MID_LAYOUT = {
+  ...DARK_LAYOUT,
+  paper_bgcolor: "rgba(55, 58, 62, 1)",
+  plot_bgcolor: "rgba(55, 58, 62, 1)",
+  font: { color: "rgba(230, 230, 230, 1)" },
+  xaxis: {
+    ...DARK_LAYOUT.xaxis,
+    tickfont: { color: "rgba(220, 220, 220, 0.85)", size: 10 },
+    gridcolor: "rgba(255, 255, 255, 0.08)",
+  },
+  yaxis: {
+    ...DARK_LAYOUT.yaxis,
+    tickfont: { color: "rgba(220, 220, 220, 0.85)", size: 10 },
+    gridcolor: "rgba(255, 255, 255, 0.08)",
+    title: { text: "Price", font: { color: "rgba(220, 220, 220, 0.85)", size: 10 } },
+  },
+};
+
+const CHART_LAYOUT_BY_BG: Record<Exclude<ChartBackground, "custom">, typeof DARK_LAYOUT> = {
+  dark: DARK_LAYOUT,
+  light: LIGHT_LAYOUT,
+  mid: MID_LAYOUT,
+};
+
+/** Pane 2 (EWO strip) background fill color per theme. */
+const PANE2_FILL_BY_BG: Record<Exclude<ChartBackground, "custom">, string> = {
+  dark: "rgba(28, 28, 28, 1)",
+  light: "rgba(235, 235, 235, 1)",
+  mid: "rgba(42, 45, 48, 1)",
+};
+
+/** EWO axis label/tick colors per theme (pane 2). */
+const EWO_AXIS_COLOR_BY_BG: Record<Exclude<ChartBackground, "custom">, string> = {
+  dark: "rgba(255,255,255,0.8)",
+  light: "rgba(60, 60, 60, 0.9)",
+  mid: "rgba(220, 220, 220, 0.85)",
+};
+
+/** EWO zeroline color per theme (visible on pane 2). */
+const EWO_ZEROLINE_COLOR_BY_BG: Record<Exclude<ChartBackground, "custom">, string> = {
+  dark: "rgba(255,255,255,0.2)",
+  light: "rgba(0, 0, 0, 0.15)",
+  mid: "rgba(255, 255, 255, 0.15)",
+};
+
+/** Relative luminance (0–1). Used to pick light vs dark text on custom background. */
+function hexLuminance(hex: string): number {
+  const m = hex.replace(/^#/, "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (!m) return 0.2;
+  const r = parseInt(m[1], 16) / 255;
+  const g = parseInt(m[2], 16) / 255;
+  const b = parseInt(m[3], 16) / 255;
+  const [rs, gs, bs] = [r, g, b].map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+/** Build layout for custom background hex. Uses luminance to choose light or dark axis/font. */
+function layoutFromCustomHex(hex: string): typeof DARK_LAYOUT {
+  const isLight = hexLuminance(hex) > 0.5;
+  const bg = hex.startsWith("#") ? hex : `#${hex}`;
+  const r = parseInt(bg.slice(1, 3), 16);
+  const g = parseInt(bg.slice(3, 5), 16);
+  const b = parseInt(bg.slice(5, 7), 16);
+  const paperBg = `rgba(${r}, ${g}, ${b}, 1)`;
+  const fontColor = isLight ? "rgba(30, 30, 30, 1)" : "rgba(255,255,255,0.9)";
+  const tickColor = isLight ? "rgba(60, 60, 60, 0.9)" : "rgba(255,255,255,0.8)";
+  const gridColor = isLight ? "rgba(0, 0, 0, 0.08)" : "rgba(255,255,255,0.1)";
+  const zerolineColor = isLight ? "rgba(0, 0, 0, 0.15)" : "rgba(255,255,255,0.2)";
+  return {
+    ...DARK_LAYOUT,
+    paper_bgcolor: paperBg,
+    plot_bgcolor: paperBg,
+    font: { color: fontColor },
+    xaxis: {
+      ...DARK_LAYOUT.xaxis,
+      tickfont: { color: tickColor, size: 10 },
+      gridcolor: gridColor,
+    },
+    yaxis: {
+      ...DARK_LAYOUT.yaxis,
+      tickfont: { color: tickColor, size: 10 },
+      gridcolor: gridColor,
+      title: { text: "Price", font: { color: tickColor, size: 10 } },
+    },
+  } as typeof DARK_LAYOUT;
+}
+
+/** Pane2 fill for custom: darken or lighten the hex. */
+function pane2FillFromHex(hex: string): string {
+  const isLight = hexLuminance(hex) > 0.5;
+  const m = hex.replace(/^#/, "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (!m) return "rgba(28, 28, 28, 1)";
+  const r = Math.max(0, parseInt(m[1], 16) + (isLight ? -20 : -12));
+  const g = Math.max(0, parseInt(m[2], 16) + (isLight ? -20 : -12));
+  const b = Math.max(0, parseInt(m[3], 16) + (isLight ? -20 : -12));
+  return `rgba(${r}, ${g}, ${b}, 1)`;
+}
+
+function ewoAxisColorFromHex(hex: string): string {
+  return hexLuminance(hex) > 0.5 ? "rgba(60, 60, 60, 0.9)" : "rgba(255,255,255,0.8)";
+}
+
+function ewoZerolineColorFromHex(hex: string): string {
+  return hexLuminance(hex) > 0.5 ? "rgba(0, 0, 0, 0.15)" : "rgba(255,255,255,0.2)";
+}
 
 function isNum(v: Num): v is number {
   return v !== null && !Number.isNaN(v);
@@ -732,11 +859,15 @@ function addRetracementsAnnotations(frame: SMCFrame): PlotlyAnnotation[] {
 export function frameToPlotly(
   frame: SMCFrame,
   visibility: Record<IndicatorId, boolean>,
-  waveState?: WaveStateRow[] | null
+  waveState?: WaveStateRow[] | null,
+  chartBackground: ChartBackground = "dark",
+  chartBackgroundHex?: string
 ): FramePlotlyResult {
   const data: PlotlyTrace[] = [];
   const shapes: PlotlyShape[] = [];
   const annotations: PlotlyAnnotation[] = [];
+  const effectiveHex = chartBackground === "custom" && chartBackgroundHex ? chartBackgroundHex : null;
+  const baseLayout = effectiveHex ? layoutFromCustomHex(effectiveHex) : CHART_LAYOUT_BY_BG[chartBackground === "custom" ? "dark" : chartBackground];
 
   /** Frame with wave_number from API when waveState is provided (same approach as EWO from API). */
   const frameForWave =
@@ -817,7 +948,7 @@ export function frameToPlotly(
 
   const hasEwoPane = visibility.ewo && getEWOValues(frame);
   const layout: FramePlotlyResult["layout"] = {
-    ...DARK_LAYOUT,
+    ...baseLayout,
     shapes,
     annotations,
   };
@@ -827,7 +958,10 @@ export function frameToPlotly(
     const gap = 0.07;
     const topDomain: [number, number] = [rowHeightPane2 + gap, 1];
     const bottomDomain: [number, number] = [0, rowHeightPane2];
-    layout.margin = { l: 10, r: 70, b: 60, t: 10 };
+    const pane2Fill = effectiveHex ? pane2FillFromHex(effectiveHex) : PANE2_FILL_BY_BG[chartBackground === "custom" ? "dark" : chartBackground];
+    const ewoAxisColor = effectiveHex ? ewoAxisColorFromHex(effectiveHex) : EWO_AXIS_COLOR_BY_BG[chartBackground === "custom" ? "dark" : chartBackground];
+    const ewoZerolineColor = effectiveHex ? ewoZerolineColorFromHex(effectiveHex) : EWO_ZEROLINE_COLOR_BY_BG[chartBackground === "custom" ? "dark" : chartBackground];
+    layout.margin = { l: 10, r: 70, b: 10, t: 10 };
     layout.autosize = false;
     layout.shapes = [
       ...shapes,
@@ -839,7 +973,7 @@ export function frameToPlotly(
         y0: 0,
         x1: 1,
         y1: rowHeightPane2,
-        fillcolor: "rgba(28, 28, 28, 1)",
+        fillcolor: pane2Fill,
         line: { width: 0 },
         layer: "below",
       },
@@ -867,12 +1001,12 @@ export function frameToPlotly(
       },
     ];
     layout.xaxis = {
-      ...DARK_LAYOUT.xaxis,
+      ...baseLayout.xaxis,
       domain: [0, 1],
       anchor: "y",
     };
     layout.yaxis = {
-      ...DARK_LAYOUT.yaxis,
+      ...baseLayout.yaxis,
       domain: topDomain,
       anchor: "x",
     };
@@ -885,6 +1019,9 @@ export function frameToPlotly(
       ...EWO_YAXIS2,
       domain: bottomDomain,
       anchor: "x2",
+      title: { text: "EWO", font: { color: ewoAxisColor, size: 10 } },
+      tickfont: { color: ewoAxisColor, size: 10 },
+      zerolinecolor: ewoZerolineColor,
     };
   }
 

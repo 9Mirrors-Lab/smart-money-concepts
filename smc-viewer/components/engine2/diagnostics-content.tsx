@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { DiagnosticsApiResult } from "@/components/diagnostics-panel";
+import { saveLoadedAnalysisResults } from "@/lib/engine2-checklist-types";
 import { getConfig, ENGINE2_LOGIC_ENTRIES, type Engine2LogicConfig } from "@/lib/engine2-logic-config";
 import { getActiveOverridesQueryFragment, getActiveOverrides, getVersionStore } from "@/lib/engine2-version-store";
 import { ENGINE2_DECISION_FLOW } from "@/lib/engine2-logic-inventory";
@@ -171,8 +172,13 @@ export function Engine2DiagnosticsContent() {
         })
       );
       const next: Record<TimeframeKey, TimeframeDiagnostic> = {} as Record<TimeframeKey, TimeframeDiagnostic>;
-      for (const { tf, data } of results) next[tf] = apiResultToFlowRow(data, tf);
+      const resultsRecord: Record<string, DiagnosticsApiResult> = {};
+      for (const { tf, data } of results) {
+        next[tf] = apiResultToFlowRow(data, tf);
+        resultsRecord[tf] = data;
+      }
       setFlowData(next);
+      saveLoadedAnalysisResults({ symbol, results: resultsRecord });
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Load failed");
       setFlowData(null);
