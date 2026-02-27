@@ -18,7 +18,7 @@ import {
   setActiveVersionId,
   type Engine2LogicVersion,
 } from "@/lib/engine2-version-store";
-import { Check, Beaker } from "lucide-react";
+import { Check, Beaker, Copy, ClipboardCheck } from "lucide-react";
 
 const CATEGORY_LABELS: Record<string, string> = {
   alignment: "Step 1: Alignment",
@@ -72,6 +72,7 @@ export function Engine2TuneContent() {
     activeId,
     refresh,
   } = useEngine2TuneState();
+  const [copied, setCopied] = useState(false);
 
   const handleSetActive = useCallback(
     (id: string | null) => {
@@ -80,6 +81,18 @@ export function Engine2TuneContent() {
     },
     [refresh]
   );
+
+  const handleCopyActive = useCallback(() => {
+    const versionName = activeId === null ? "Default" : storeVersions.find((v) => v.id === activeId)?.name ?? activeId;
+    const lines = ENGINE2_LOGIC_ENTRIES.map(
+      (e) => `${e.key}: ${currentConfig[e.key]}`
+    );
+    const text = `# Active logic — ${versionName}\n${lines.join("\n")}`;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [activeId, storeVersions, currentConfig]);
 
   const handleApply = useCallback(() => {
     const next: Record<string, number> = { ...DEFAULT_ENGINE2_LOGIC };
@@ -136,21 +149,23 @@ export function Engine2TuneContent() {
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Button
-              variant={activeId === null ? "default" : "outline"}
+              variant="outline"
               size="sm"
               onClick={() => handleSetActive(null)}
+              className={activeId === null ? "border-amber-500/60 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300" : ""}
             >
-              {activeId === null ? <Check className="mr-1 size-3.5" /> : null}
+              {activeId === null ? <Check className="size-3.5" /> : null}
               Use Default
             </Button>
             {storeVersions.map((v) => (
               <Button
                 key={v.id}
-                variant={activeId === v.id ? "default" : "outline"}
+                variant="outline"
                 size="sm"
                 onClick={() => handleSetActive(v.id)}
+                className={activeId === v.id ? "border-amber-500/60 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300" : ""}
               >
-                {activeId === v.id ? <Check className="mr-1 size-3.5" /> : null}
+                {activeId === v.id ? <Check className="size-3.5" /> : null}
                 Use {v.name}
               </Button>
             ))}
@@ -162,39 +177,10 @@ export function Engine2TuneContent() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Beaker className="size-5 text-muted-foreground" />
-            Active logic (used site-wide)
+            Logic gates
           </CardTitle>
           <CardDescription>
-            These are the exact threshold values applied everywhere. Compare with the table below to verify the version in use.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm">
-            Version:{" "}
-            <span className="font-semibold text-foreground">
-              {activeId === null ? "Default" : storeVersions.find((v) => v.id === activeId)?.name ?? activeId}
-            </span>
-          </p>
-          <div className="rounded-md border border-border bg-muted/30 font-mono text-sm">
-            <table className="w-full border-collapse">
-              <tbody>
-                {ENGINE2_LOGIC_ENTRIES.map((entry) => (
-                  <tr key={entry.key} className="border-b border-border/50 last:border-b-0">
-                    <td className="py-1.5 pl-3 pr-4 text-muted-foreground">{entry.key}</td>
-                    <td className="py-1.5 pr-3 tabular-nums text-foreground">{currentConfig[entry.key]}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Logic gates</CardTitle>
-          <CardDescription>
-            Edit the New column and click Apply to save a new version. Saved versions appear as columns so you can compare.
+            Active shows the exact value in use site-wide. Edit the New column and click Apply to save a new version. Saved versions appear as columns so you can compare.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -204,6 +190,12 @@ export function Engine2TuneContent() {
                 <tr className="border-b border-border">
                   <th className="w-[220px] py-2 pr-4 text-left font-medium text-muted-foreground">
                     Parameter
+                  </th>
+                  <th className="w-[72px] px-1 py-2 text-center font-medium text-amber-500/80">
+                    <div>Active</div>
+                    <div className="text-xs font-normal text-muted-foreground">
+                      {activeId === null ? "Default" : storeVersions.find((v) => v.id === activeId)?.name ?? activeId}
+                    </div>
                   </th>
                   <th
                     className={`w-[72px] cursor-pointer select-none px-1 py-2 text-center font-medium transition-colors ${activeId === null ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/60"}`}
@@ -241,7 +233,7 @@ export function Engine2TuneContent() {
                     <Fragment key={cat}>
                       <tr>
                         <td
-                          colSpan={3 + storeVersions.length}
+                          colSpan={4 + storeVersions.length}
                           className="border-b border-border/60 pb-1 pt-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
                         >
                           {CATEGORY_LABELS[cat] ?? cat}
@@ -257,6 +249,12 @@ export function Engine2TuneContent() {
                             <div className="text-xs text-muted-foreground">
                               {entry.description}
                             </div>
+                            <div className="mt-0.5 font-mono text-xs text-muted-foreground/60">
+                              {entry.key}
+                            </div>
+                          </td>
+                          <td className="px-1 py-2 text-center font-mono tabular-nums font-semibold text-amber-500/90">
+                            {currentConfig[entry.key]}
                           </td>
                           <td
                             className={`px-1 py-2 text-center font-mono tabular-nums ${activeId === null ? "bg-primary/10" : ""}`}
@@ -295,8 +293,20 @@ export function Engine2TuneContent() {
               </tbody>
             </table>
           </div>
-          <div className="mt-4">
-            <Button onClick={handleApply}>Apply (save as new version)</Button>
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+            <Button variant="secondary" onClick={handleApply}>Apply (save as new version)</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyActive}
+              className="gap-1.5 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 hover:text-amber-400"
+            >
+              {copied ? (
+                <><ClipboardCheck className="size-3.5" />Copied!</>
+              ) : (
+                <><Copy className="size-3.5" />Copy active</>
+              )}
+            </Button>
           </div>
         </CardContent>
       </Card>
