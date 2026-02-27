@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Inter, sans-serif; padding: 20px; background: #1a1a1a; color: #e0e0e0; margin: 0; }
+    h2 { margin: 0 0 8px; font-size: 16px; }
+    p { font-size: 12px; color: #888; margin: 0 0 16px; }
+    button {
+      background: #18a0fb; color: #fff; border: none; border-radius: 6px;
+      padding: 10px 20px; font-size: 14px; cursor: pointer; width: 100%;
+    }
+    button:hover { background: #0d8de8; }
+    #status { margin-top: 12px; font-size: 12px; color: #aaa; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <h2>SMC Viewer Designs Importer</h2>
+  <p>Creates 6 frames (1440×900) in a new Figma page with screenshots from the SMC Viewer app.</p>
+  <button id="run">Create Design Frames</button>
+  <div id="status"></div>
+  <script>
+    document.getElementById('run').onclick = function() {
+      this.disabled = true;
+      document.getElementById('status').textContent = 'Creating frames…';
+      parent.postMessage({ pluginMessage: { type: 'create-frames' } }, '*');
+    };
+    window.onmessage = function(e) {
+      const msg = e.data.pluginMessage;
+      if (!msg) return;
+      if (msg.type === 'progress') {
+        document.getElementById('status').textContent = msg.text;
+      } else if (msg.type === 'done') {
+        document.getElementById('status').textContent = '✅ Done! ' + msg.count + ' frames created.';
+        document.getElementById('run').disabled = false;
+      } else if (msg.type === 'error') {
+        document.getElementById('status').textContent = '❌ Error: ' + msg.message;
+        document.getElementById('run').disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>

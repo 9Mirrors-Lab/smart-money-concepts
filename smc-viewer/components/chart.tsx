@@ -2,8 +2,9 @@
 
 import dynamic from "next/dynamic";
 import type { ComponentType } from "react";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { PlotlyTrace } from "@/lib/frame-to-plotly";
+import { useChartSettings } from "@/lib/chart-settings-context";
 
 interface PlotlyComponentProps {
   data: PlotlyTrace[];
@@ -67,8 +68,11 @@ export function SMCChart({
   yRange,
   yAxisType = "linear",
 }: SMCChartProps) {
+  const { calcClickSlot, setLastChartClickPrice, setCalcClickSlot } = useChartSettings();
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 800, height: 450 });
+  const calcClickSlotRef = useRef(calcClickSlot);
+  useEffect(() => { calcClickSlotRef.current = calcClickSlot; }, [calcClickSlot]);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -112,6 +116,40 @@ export function SMCChart({
     }
     return merged;
   }, [baseLayout, width, height, size.width, size.height, yRange, yAxisType]);
+
+  const handleChartClick = useCallback((e: MouseEvent) => {
+    if (!calcClickSlotRef.current) return;
+    const el = containerRef.current;
+    if (!el) return;
+
+    // Find the Plotly SVG plot area inside the container
+    const plotBg = el.querySelector(".nsewdrag") as SVGElement | null;
+    if (!plotBg) return;
+
+    const bgRect = plotBg.getBoundingClientRect();
+    const relY = e.clientY - bgRect.top;
+    const fracY = relY / bgRect.height;
+
+    // Read the current y-axis range from the rendered layout stored on the div
+    // Plotly stores the computed layout on the gd (graph div) element
+    const gd = el.querySelector(".js-plotly-plot") as (HTMLElement & { _fullLayout?: { yaxis?: { range?: [number, number] } } }) | null;
+    const yRange = gd?._fullLayout?.yaxis?.range;
+    if (!yRange || yRange.length < 2) return;
+
+    const [yMin, yMax] = yRange;
+    // Plotly y-axis: top of plot = yMax, bottom = yMin
+    const price = yMax - fracY * (yMax - yMin);
+
+    setLastChartClickPrice(price);
+    setCalcClickSlot(null);
+  }, [setLastChartClickPrice, setCalcClickSlot]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.addEventListener("click", handleChartClick);
+    return () => el.removeEventListener("click", handleChartClick);
+  }, [handleChartClick]);
 
   return (
     <div

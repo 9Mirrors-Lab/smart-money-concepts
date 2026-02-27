@@ -1,0 +1,14 @@
+{
+  "name": "SMC Viewer — Build Components",
+  "id": "smc-viewer-build-components-001",
+  "api": "1.0.0",
+  "main": "code.js",
+  "capabilities": [],
+  "enableProposedApi": false,
+  "documentAccess": "dynamic-page",
+  "editorType": ["figma"],
+  "ui": "ui.html",
+  "networkAccess": {
+    "allowedDomains": ["none"]
+  }
+}

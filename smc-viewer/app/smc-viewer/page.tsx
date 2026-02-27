@@ -425,9 +425,10 @@ function SMCViewer({
       indicatorVisibility,
       waveState,
       chartSettings.chartBackground,
-      chartSettings.chartBackgroundHex
+      chartSettings.chartBackgroundHex,
+      chartSettings.indicatorOpacity
     );
-  }, [current, indicatorVisibility, waveState, chartSettings.chartBackground, chartSettings.chartBackgroundHex]);
+  }, [current, indicatorVisibility, waveState, chartSettings.chartBackground, chartSettings.chartBackgroundHex, chartSettings.indicatorOpacity]);
 
   const alignmentRailMap = useMemo(() => {
     const m = new Map<string, { stack_aligned: boolean }>();
@@ -451,17 +452,85 @@ function SMCViewer({
   );
 
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  // Accumulated delta so trackpad momentum fires one step per meaningful tick
+  const wheelAccumRef = useRef(0);
   useEffect(() => {
     const el = chartContainerRef.current;
     if (!el) return;
+    const WHEEL_THRESHOLD = 20; // px of accumulated delta before stepping one frame
     const onWheel = (e: WheelEvent) => {
       if (!e.shiftKey) return;
       e.preventDefault();
-      if (e.deltaY > 0) stepForward();
-      else if (e.deltaY < 0) stepBack();
+      e.stopPropagation();
+      // Prefer horizontal delta (trackpad swipe) over vertical
+      const delta = Math.abs(e.deltaX) >= Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      wheelAccumRef.current += delta;
+      while (Math.abs(wheelAccumRef.current) >= WHEEL_THRESHOLD) {
+        if (wheelAccumRef.current > 0) {
+          stepForward();
+          wheelAccumRef.current -= WHEEL_THRESHOLD;
+        } else {
+          stepBack();
+          wheelAccumRef.current += WHEEL_THRESHOLD;
+        }
+      }
     };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+    // Use capture so we intercept before Plotly's own wheel handler
+    el.addEventListener("wheel", onWheel, { passive: false, capture: true });
+    return () => {
+      el.removeEventListener("wheel", onWheel, { capture: true });
+      wheelAccumRef.current = 0;
+    };
+  }, [stepForward, stepBack]);
+
+  // Shift+drag: pointer drag left/right scrubs through frames
+  const dragStateRef = useRef<{ lastStepX: number } | null>(null);
+  useEffect(() => {
+    const el = chartContainerRef.current;
+    if (!el) return;
+    const STEP_PX = 4; // px per frame step — smaller = more responsive
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (!e.shiftKey) return;
+      dragStateRef.current = { lastStepX: e.clientX };
+      el.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragStateRef.current) return;
+      const dx = e.clientX - dragStateRef.current.lastStepX;
+      const steps = Math.trunc(dx / STEP_PX);
+      if (steps !== 0) {
+        if (steps > 0) {
+          for (let i = 0; i < steps; i++) stepBack();
+        } else {
+          for (let i = 0; i < -steps; i++) stepForward();
+        }
+        dragStateRef.current.lastStepX += steps * STEP_PX;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (!dragStateRef.current) return;
+      dragStateRef.current = null;
+      e.preventDefault();
+    };
+
+    el.addEventListener("pointerdown", onPointerDown, { capture: true });
+    el.addEventListener("pointermove", onPointerMove, { capture: true });
+    el.addEventListener("pointerup", onPointerUp, { capture: true });
+    el.addEventListener("pointercancel", onPointerUp, { capture: true });
+
+    return () => {
+      el.removeEventListener("pointerdown", onPointerDown, { capture: true });
+      el.removeEventListener("pointermove", onPointerMove, { capture: true });
+      el.removeEventListener("pointerup", onPointerUp, { capture: true });
+      el.removeEventListener("pointercancel", onPointerUp, { capture: true });
+    };
   }, [stepForward, stepBack]);
 
   const toolbarContent = (

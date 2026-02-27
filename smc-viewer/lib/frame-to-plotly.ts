@@ -223,6 +223,8 @@ const EWO_XAXIS2 = {
 export interface WaveStateRow {
   timestamp: string;
   wave_number?: string | number | null;
+  internal_iv_low?: number | null;
+  internal_iv_high?: number | null;
 }
 
 /** Coerce wave_number to "3"|"4"|"5" or null (API may return string or number). */
@@ -385,7 +387,7 @@ function addCandlestickTrace(ohlc: OHLC): PlotlyTrace {
   };
 }
 
-function addFVGTraces(frame: SMCFrame): { traces: PlotlyTrace[]; shapes: PlotlyShape[] } {
+function addFVGTraces(frame: SMCFrame, opacity = 0.2): { traces: PlotlyTrace[]; shapes: PlotlyShape[] } {
   const traces: PlotlyTrace[] = [];
   const shapes: PlotlyShape[] = [];
   const { fvg, ohlc } = frame;
@@ -404,7 +406,7 @@ function addFVGTraces(frame: SMCFrame): { traces: PlotlyTrace[]; shapes: PlotlyS
       y1: fvg.Bottom[i],
       line: { width: 0 },
       fillcolor: "yellow",
-      opacity: 0.2,
+      opacity,
     });
     const midX = ohlc.x[Math.round((i + x1) / 2)];
     const midY = ((fvg.Top[i] ?? 0) + (fvg.Bottom[i] ?? 0)) / 2;
@@ -589,7 +591,7 @@ function formatVolume(volume: number): string {
   return volume.toFixed(2);
 }
 
-function addOBTraces(frame: SMCFrame): { traces: PlotlyTrace[]; shapes: PlotlyShape[]; annotations: PlotlyAnnotation[] } {
+function addOBTraces(frame: SMCFrame, opacity = 0.2): { traces: PlotlyTrace[]; shapes: PlotlyShape[]; annotations: PlotlyAnnotation[] } {
   const shapes: PlotlyShape[] = [];
   const annotations: PlotlyAnnotation[] = [];
   const { ob, ohlc } = frame;
@@ -611,7 +613,7 @@ function addOBTraces(frame: SMCFrame): { traces: PlotlyTrace[]; shapes: PlotlySh
       y1: ob.Top[i],
       line: { color: "Purple" },
       fillcolor: "Purple",
-      opacity: 0.2,
+      opacity,
       name: ob.OB[i] === 1 ? "Bullish OB" : "Bearish OB",
       legendgroup: ob.OB[i] === 1 ? "bullish ob" : "bearish ob",
     });
@@ -795,7 +797,8 @@ function addSessionShapes(
 
 function addSessionsShapes(
   frame: SMCFrame,
-  visibility: Record<IndicatorId, boolean>
+  visibility: Record<IndicatorId, boolean>,
+  opacityOverrides?: Partial<Record<IndicatorId, number>>
 ): PlotlyShape[] {
   const { sessions, ohlc } = frame;
   const shapes: PlotlyShape[] = [];
@@ -805,7 +808,8 @@ function addSessionsShapes(
       if (!visibility[indicatorId as keyof typeof visibility]) continue;
       const data = sessions[sessionKey];
       const style = SESSION_COLORS[sessionKey];
-      if (data && style) shapes.push(...addSessionShapes(ohlc, data, style.fill, style.opacity));
+      const opacity = opacityOverrides?.[indicatorId as IndicatorId] ?? style.opacity;
+      if (data && style) shapes.push(...addSessionShapes(ohlc, data, style.fill, opacity));
     }
   } else {
     const legacy = sessions as unknown as {
@@ -814,8 +818,9 @@ function addSessionsShapes(
       Low: (number | null)[];
     };
     if (visibility.sessionsLondon) {
+      const opacity = opacityOverrides?.sessionsLondon ?? SESSION_COLORS.london.opacity;
       shapes.push(
-        ...addSessionShapes(ohlc, legacy, SESSION_COLORS.london.fill, SESSION_COLORS.london.opacity)
+        ...addSessionShapes(ohlc, legacy, SESSION_COLORS.london.fill, opacity)
       );
     }
   }
@@ -856,12 +861,115 @@ function addRetracementsAnnotations(frame: SMCFrame): PlotlyAnnotation[] {
   return annotations;
 }
 
+function addBoxShapes(
+  frame: SMCFrame,
+  waveState: WaveStateRow[]
+): { shapes: PlotlyShape[]; annotations: PlotlyAnnotation[] } {
+  const shapes: PlotlyShape[] = [];
+  const annotations: PlotlyAnnotation[] = [];
+  if (!waveState.length || !frame.ohlc.x.length) return { shapes, annotations };
+
+  const lowMap = new Map<string, number | null>();
+  const highMap = new Map<string, number | null>();
+  const waveMap = new Map<string, string | null>();
+
+  for (const r of waveState) {
+    if (r.timestamp) {
+       lowMap.set(r.timestamp, r.internal_iv_low ?? null);
+       highMap.set(r.timestamp, r.internal_iv_high ?? null);
+       waveMap.set(r.timestamp, r.wave_number ? String(r.wave_number) : null);
+    }
+  }
+
+  let startIdx = -1;
+  let curLow: number | null = null;
+  let curHigh: number | null = null;
+  let curWave: string | null = null;
+
+  const pushBox = (x0: string, y0: number, x1: string, y1: number, midIdx: number, waveNum: string | null) => {
+    let boxColor = "rgba(100, 150, 255"; // Default light blue
+    let label = "Box";
+    let fontSize = 10;
+    
+    if (waveNum === "3") {
+       boxColor = "rgba(100, 150, 255"; // Light Blue for Wave 3 tracking
+       label = "•"; // Smaller solid dot as active tracking 
+       fontSize = 16; // The bullet character needs to be a bit bigger to see, but not as massive as ◉
+    } else if (waveNum === "4") {
+       boxColor = "rgba(255, 200, 100"; // Distinct Yellow/Orange for the actual W4
+       label = "W4 Target"; 
+       fontSize = 11;
+    } else if (waveNum === "5") {
+       boxColor = "rgba(200, 100, 150"; // Purplish/Magenta for W5 continuation
+       label = "W4 Range";
+       fontSize = 11;
+    }
+
+    shapes.push({
+      type: "rect",
+      x0,
+      y0,
+      x1,
+      y1,
+      line: { color: `${boxColor}, 0.3)`, width: 1, dash: "dot" }, 
+      fillcolor: `${boxColor}, 0.05)`,
+      layer: "below",
+      name: label,
+      legendgroup: "box"
+    });
+    annotations.push({
+      x: frame.ohlc.x[midIdx],
+      y: y1,
+      xref: "x",
+      yref: "y",
+      text: label,
+      font: { color: `${boxColor}, 0.8)`, size: fontSize },
+      showarrow: false,
+      yshift: 12
+    });
+  };
+
+  for (let i = 0; i < frame.ohlc.x.length; i++) {
+    const ts = frame.ohlc.x[i];
+    const l = lowMap.get(ts) ?? null;
+    const h = highMap.get(ts) ?? null;
+    const w = waveMap.get(ts) ?? null;
+
+    if (l !== null && h !== null) {
+      if (startIdx === -1) {
+        startIdx = i;
+        curLow = l;
+        curHigh = h;
+        curWave = w;
+      } else if (l !== curLow || h !== curHigh || w !== curWave) {
+        pushBox(frame.ohlc.x[startIdx], curLow as number, frame.ohlc.x[i - 1], curHigh as number, Math.floor((startIdx + i - 1) / 2), curWave);
+        startIdx = i;
+        curLow = l;
+        curHigh = h;
+        curWave = w;
+      }
+    } else {
+      if (startIdx !== -1) {
+        pushBox(frame.ohlc.x[startIdx], curLow as number, frame.ohlc.x[i - 1], curHigh as number, Math.floor((startIdx + i - 1) / 2), curWave);
+        startIdx = -1;
+      }
+    }
+  }
+
+  if (startIdx !== -1 && curLow !== null && curHigh !== null) {
+    pushBox(frame.ohlc.x[startIdx], curLow as number, frame.ohlc.x[frame.ohlc.x.length - 1], curHigh as number, Math.floor((startIdx + frame.ohlc.x.length - 1) / 2), curWave);
+  }
+
+  return { shapes, annotations };
+}
+
 export function frameToPlotly(
   frame: SMCFrame,
   visibility: Record<IndicatorId, boolean>,
   waveState?: WaveStateRow[] | null,
   chartBackground: ChartBackground = "dark",
-  chartBackgroundHex?: string
+  chartBackgroundHex?: string,
+  opacityOverrides?: Partial<Record<IndicatorId, number>>
 ): FramePlotlyResult {
   const data: PlotlyTrace[] = [];
   const shapes: PlotlyShape[] = [];
@@ -889,7 +997,7 @@ export function frameToPlotly(
   }
 
   if (visibility.fvg) {
-    const { traces, shapes: s } = addFVGTraces(frame);
+    const { traces, shapes: s } = addFVGTraces(frame, opacityOverrides?.fvg);
     data.push(...traces);
     shapes.push(...s);
   }
@@ -912,7 +1020,7 @@ export function frameToPlotly(
   }
 
   if (visibility.ob) {
-    const { shapes: s, annotations: a } = addOBTraces(frame);
+    const { shapes: s, annotations: a } = addOBTraces(frame, opacityOverrides?.ob);
     shapes.push(...s);
     annotations.push(...a);
   }
@@ -925,10 +1033,16 @@ export function frameToPlotly(
     data.push(...addPreviousHighLowTraces(frame));
   }
 
-  shapes.push(...addSessionsShapes(frame, visibility));
+  shapes.push(...addSessionsShapes(frame, visibility, opacityOverrides));
 
   if (visibility.retracements) {
     annotations.push(...addRetracementsAnnotations(frame));
+  }
+
+  if (visibility.box && waveState) {
+    const boxOutput = addBoxShapes(frame, waveState);
+    shapes.push(...boxOutput.shapes);
+    annotations.push(...boxOutput.annotations);
   }
 
   if (visibility.ewo && getEWOValues(frame)) {
@@ -1014,6 +1128,7 @@ export function frameToPlotly(
       ...EWO_XAXIS2,
       domain: [0, 1],
       anchor: "y2",
+      matches: "x",
     };
     layout.yaxis2 = {
       ...EWO_YAXIS2,

@@ -1,0 +1,10 @@
+{
+  "name": "SMC Viewer — Build Components",
+  "id": "smc-viewer-build-components",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": [
+    "figma"
+  ]
+}

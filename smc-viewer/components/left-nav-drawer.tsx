@@ -66,6 +66,7 @@ export function LeftNavDrawer({ open, onOpenChange }: LeftNavDrawerProps) {
   const [hoveredSetting, setHoveredSetting] = useState<SettingId | null>(null);
   const [flyoutTop, setFlyoutTop] = useState(0);
   const leaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sliderDraggingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Record<SettingId, HTMLDivElement | null>>({
     indicators: null,
@@ -96,11 +97,15 @@ export function LeftNavDrawer({ open, onOpenChange }: LeftNavDrawerProps) {
     if (chartColorOpen) clearLeaveTimeout();
   }, [chartColorOpen, clearLeaveTimeout]);
 
+  const { calcClickSlot } = useChartSettings();
+
   const scheduleClose = useCallback(() => {
     if (chartColorOpen) return;
+    if (calcClickSlot !== null) return;
+    if (sliderDraggingRef.current) return;
     clearLeaveTimeout();
     leaveTimeoutRef.current = setTimeout(() => setHoveredSetting(null), HOVER_LEAVE_MS);
-  }, [clearLeaveTimeout, chartColorOpen]);
+  }, [clearLeaveTimeout, chartColorOpen, calcClickSlot]);
 
   const openSetting = useCallback((id: SettingId) => {
     clearLeaveTimeout();
@@ -281,6 +286,15 @@ export function LeftNavDrawer({ open, onOpenChange }: LeftNavDrawerProps) {
           }}
           onMouseEnter={clearLeaveTimeout}
           onMouseLeave={scheduleClose}
+          onPointerDown={(e) => {
+            if ((e.target as HTMLElement).closest('input[type="range"]')) {
+              sliderDraggingRef.current = true;
+              clearLeaveTimeout();
+            }
+          }}
+          onPointerUp={() => {
+            sliderDraggingRef.current = false;
+          }}
         >
           {hasFlyout && (
             <div className="menu-flyout-inner px-4 pb-4 pt-1">
@@ -289,14 +303,13 @@ export function LeftNavDrawer({ open, onOpenChange }: LeftNavDrawerProps) {
                     visibility={settings.indicatorVisibility}
                     onToggle={settings.toggleIndicator}
                     onCandlesOnly={settings.setCandlesOnly}
+                    pinned={settings.indicatorsPinned}
+                    onPinChange={settings.setIndicatorsPinned}
                   />
                 )}
                 {hoveredSetting === "chart" && (
                   <>
-                    <h3 className="menu-settings-title mb-3">Chart background</h3>
-                    <p className="menu-settings-desc mb-3">
-                      Pick a color for the main chart (panel 1). The picker stays open so you can use the eyedropper or type a hex value.
-                    </p>
+                    <p className="menu-settings-desc mb-2">Current Color Selected</p>
                     <Popover open={chartColorOpen} onOpenChange={setChartColorOpen}>
                       <PopoverTrigger asChild>
                         <button
@@ -356,16 +369,15 @@ export function LeftNavDrawer({ open, onOpenChange }: LeftNavDrawerProps) {
                     </Popover>
                   </>
                 )}
-                {hoveredSetting === "export" && (
-                  <>
-                    <h3 className="menu-settings-title mb-3">DB Export</h3>
-                    <ExportPanel
-                      symbol={settings.chartMeta?.symbol ?? ""}
-                      currentTimeframe={settings.chartMeta?.timeframe ?? "23"}
-                      onExportSuccess={settings.onChartRefresh ?? undefined}
-                    />
-                  </>
-                )}
+                <div
+                  className={hoveredSetting === "export" ? "" : "export-module-hidden"}
+                >
+                  <ExportPanel
+                    symbol={settings.chartMeta?.symbol ?? ""}
+                    currentTimeframe={settings.chartMeta?.timeframe ?? "23"}
+                    onExportSuccess={settings.onChartRefresh ?? undefined}
+                  />
+                </div>
                 {hoveredSetting === "time" && (
                   <>
                     <h3 className="menu-settings-title mb-3">Time conversion</h3>

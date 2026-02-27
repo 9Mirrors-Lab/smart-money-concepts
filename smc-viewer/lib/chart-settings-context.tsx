@@ -14,22 +14,23 @@ import type { ChartBackground as ChartBackgroundType } from "./frame-to-plotly";
 
 const DEFAULT_VISIBILITY: Record<IndicatorId, boolean> = {
   candles: true,
-  fvg: true,
-  swing: true,
+  fvg: false,
+  swing: false,
   fib: false,
-  bos: true,
-  choch: true,
-  ob: true,
-  liquidity: true,
+  bos: false,
+  choch: false,
+  ob: false,
+  liquidity: false,
   phl: false,
-  sessionsAsia: true,
+  sessionsAsia: false,
   sessionsLondon: false,
   sessionsNYAM: false,
   sessionsNYPM: false,
-  retracements: true,
+  retracements: false,
   ewo: true,
   sma5: false,
   sma35: false,
+  box: true,
 } as Record<IndicatorId, boolean>;
 
 export interface ChartMeta {
@@ -38,6 +39,9 @@ export interface ChartMeta {
 }
 
 export type ChartBackground = ChartBackgroundType;
+
+/** Which calculator field the next chart click will fill. */
+export type CalcClickSlot = "high" | "low" | null;
 
 export interface ChartSettingsState {
   indicatorVisibility: Record<IndicatorId, boolean>;
@@ -59,6 +63,19 @@ export interface ChartSettingsState {
   setChartBackground: (v: ChartBackground) => void;
   chartBackgroundHex: string;
   setChartBackgroundHex: (v: string) => void;
+  /** Calculator click-to-fill: which slot is awaiting a chart click */
+  calcClickSlot: CalcClickSlot;
+  setCalcClickSlot: (slot: CalcClickSlot) => void;
+  /** Last price clicked on the chart (pushed from SMCChart onClick) */
+  lastChartClickPrice: number | null;
+  setLastChartClickPrice: (price: number) => void;
+  clearLastChartClickPrice: () => void;
+  /** Whether the indicator list is pinned inside the nav drawer */
+  indicatorsPinned: boolean;
+  setIndicatorsPinned: (v: boolean) => void;
+  /** Per-indicator opacity overrides (0–1). Only FVG, OB, and sessions are supported. */
+  indicatorOpacity: Partial<Record<IndicatorId, number>>;
+  setIndicatorOpacity: (id: IndicatorId, value: number) => void;
 }
 
 const defaultState: ChartSettingsState = {
@@ -81,6 +98,15 @@ const defaultState: ChartSettingsState = {
   setChartBackground: () => {},
   chartBackgroundHex: "#282828",
   setChartBackgroundHex: () => {},
+  calcClickSlot: null,
+  setCalcClickSlot: () => {},
+  lastChartClickPrice: null,
+  setLastChartClickPrice: () => {},
+  clearLastChartClickPrice: () => {},
+  indicatorsPinned: true,
+  setIndicatorsPinned: () => {},
+  indicatorOpacity: {},
+  setIndicatorOpacity: () => {},
 };
 
 export interface ChartSettingsRegistration {
@@ -109,6 +135,22 @@ export function ChartSettingsProvider({ children }: { children: ReactNode }) {
   const [squaredRange, setSquaredRange] = useState<[number, number] | null>(null);
   const [chartBackground, setChartBackground] = useState<ChartBackground>("custom");
   const [chartBackgroundHex, setChartBackgroundHex] = useState<string>("#282828");
+  const [calcClickSlot, setCalcClickSlot] = useState<CalcClickSlot>(null);
+  const [lastChartClickPrice, setLastChartClickPriceState] = useState<number | null>(null);
+  const [indicatorsPinned, setIndicatorsPinned] = useState(true);
+  const [indicatorOpacity, setIndicatorOpacityState] = useState<Partial<Record<IndicatorId, number>>>({});
+
+  const setIndicatorOpacity = useCallback((id: IndicatorId, value: number) => {
+    setIndicatorOpacityState((prev) => ({ ...prev, [id]: value }));
+  }, []);
+
+  const setLastChartClickPrice = useCallback((price: number) => {
+    setLastChartClickPriceState(price);
+  }, []);
+
+  const clearLastChartClickPrice = useCallback(() => {
+    setLastChartClickPriceState(null);
+  }, []);
 
   const chartCallbacks = useRef<{
     toggleIndicator: (id: IndicatorId) => void;
@@ -167,6 +209,15 @@ export function ChartSettingsProvider({ children }: { children: ReactNode }) {
     setChartBackground,
     chartBackgroundHex,
     setChartBackgroundHex,
+    calcClickSlot,
+    setCalcClickSlot,
+    lastChartClickPrice,
+    setLastChartClickPrice,
+    clearLastChartClickPrice,
+    indicatorsPinned,
+    setIndicatorsPinned,
+    indicatorOpacity,
+    setIndicatorOpacity,
     registerChart: useCallback((opts) => {
       chartCallbacks.current = {
         toggleIndicator: opts.toggleIndicator,

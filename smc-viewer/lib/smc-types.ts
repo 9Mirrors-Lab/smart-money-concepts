@@ -128,6 +128,7 @@ export const INDICATOR_IDS = [
   "ewo",
   "sma5",
   "sma35",
+  "box",
 ] as const;
 
 export type IndicatorId = (typeof INDICATOR_IDS)[number];
@@ -159,4 +160,5 @@ export const INDICATOR_LABELS: Record<IndicatorId, string> = {
   ewo: "EWO",
   sma5: "SMA 5",
   sma35: "SMA 35",
+  box: "Box",
 };

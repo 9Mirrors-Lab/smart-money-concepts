@@ -8,15 +8,15 @@ const BASE_INTERVAL_MS = 500;
 
 const DEFAULT_INDICATOR_VISIBILITY: Record<IndicatorId, boolean> = {
   candles: true,
-  fvg: true,
-  swing: true,
+  fvg: false,
+  swing: false,
   fib: false,
-  bos: true,
-  choch: true,
-  ob: true,
-  liquidity: true,
+  bos: false,
+  choch: false,
+  ob: false,
+  liquidity: false,
   phl: false,
-  sessionsAsia: true,
+  sessionsAsia: false,
   sessionsLondon: false,
   sessionsNYAM: false,
   sessionsNYPM: false,
@@ -24,6 +24,7 @@ const DEFAULT_INDICATOR_VISIBILITY: Record<IndicatorId, boolean> = {
   ewo: true,
   sma5: false,
   sma35: false,
+  box: true,
 };
 
 export interface UseSMCPlayerOptions {

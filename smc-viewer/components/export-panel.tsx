@@ -1,18 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-
-const inputClassName =
-  "border-input bg-background w-full rounded-md border px-2.5 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { ExportHud } from "@/components/export-hud";
 
 const TIMEFRAME_OPTIONS = [
   { value: "current", label: "Current" },
@@ -22,7 +11,7 @@ const TIMEFRAME_OPTIONS = [
   { value: "1D", label: "1D" },
   { value: "1W", label: "1W" },
   { value: "1M", label: "1M" },
-  { value: "all", label: "All (23, 90, 360, 1D, 1W, 1M)" },
+  { value: "all", label: "All TF" },
 ] as const;
 
 export interface ExportPanelProps {
@@ -36,114 +25,204 @@ export function ExportPanel({
   currentTimeframe,
   onExportSuccess,
 }: ExportPanelProps) {
-  const [last, setLast] = useState(500);
+  const [last, setLast] = useState(1000);
   const [windowSize, setWindowSize] = useState(100);
   const [timeframe, setTimeframe] = useState<string>("current");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [hudActive, setHudActive] = useState(false);
+  const [lastResult, setLastResult] = useState<{
+    type: "ok" | "error";
+    text: string;
+  } | null>(null);
 
-  const handleRun = async () => {
-    setMessage(null);
-    setLoading(true);
-    try {
-      const tf = timeframe === "current" ? currentTimeframe : timeframe;
-      const allTimeframes = timeframe === "all";
-      const res = await fetch("/api/export-smc-frames", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          symbol,
-          timeframe: allTimeframes ? "23" : tf,
-          allTimeframes,
-          last,
-          window: windowSize,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setMessage({
-          type: "error",
-          text: data.detail ?? data.error ?? `Export failed (${res.status})`,
-        });
-        return;
-      }
-      setMessage({ type: "ok", text: data.message ?? "Export finished." });
-      onExportSuccess?.();
-    } catch (e) {
-      setMessage({
-        type: "error",
-        text: e instanceof Error ? e.message : "Export failed",
-      });
-    } finally {
-      setLoading(false);
-    }
+  const handleRun = () => {
+    setLastResult(null);
+    setHudActive(true);
   };
 
+  const handleHudComplete = useCallback(
+    (result: { ok: boolean; message: string }) => {
+      setLastResult({
+        type: result.ok ? "ok" : "error",
+        text: result.message,
+      });
+      if (result.ok) onExportSuccess?.();
+      setTimeout(() => setHudActive(false), 4000);
+    },
+    [onExportSuccess],
+  );
+
+  const resolvedTf = timeframe === "current" ? currentTimeframe : timeframe;
+
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3">
-      <h3 className="text-sm font-medium text-foreground">Export to DB</h3>
-      <p className="text-xs text-muted-foreground">
-        Run the script to update <code className="rounded bg-muted px-1">smc_results</code> (used by Live API).
-      </p>
-      <div className="space-y-2">
-        <Label htmlFor="export-last" className="text-xs text-muted-foreground">
-          Records (last N bars)
-        </Label>
-        <input
-          id="export-last"
-          type="number"
-          min={100}
-          max={10000}
+    <div className="export-module">
+      {/* Row 1: Bars + Window side by side */}
+      <div className="export-module-params-row">
+        <CompactNumericField
+          label="Bars"
           value={last}
-          onChange={(e) => setLast(Math.min(10000, Math.max(100, Number(e.target.value) || 500)))}
-          className={inputClassName}
+          min={1000}
+          max={10000}
+          step={1000}
+          disabled={hudActive}
+          onChange={(v) => setLast(Math.min(10000, Math.max(1000, v)))}
         />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="export-window" className="text-xs text-muted-foreground">
-          Window (bars per frame)
-        </Label>
-        <input
-          id="export-window"
-          type="number"
+        <CompactNumericField
+          label="Window"
+          value={windowSize}
           min={50}
           max={500}
-          value={windowSize}
-          onChange={(e) => setWindowSize(Math.min(500, Math.max(50, Number(e.target.value) || 100)))}
-          className={inputClassName}
+          step={10}
+          disabled={hudActive}
+          onChange={(v) => setWindowSize(Math.min(500, Math.max(50, v)))}
         />
       </div>
-      <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Timeframe</Label>
-        <Select value={timeframe} onValueChange={setTimeframe}>
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TIMEFRAME_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <Button
-        type="button"
-        onClick={handleRun}
-        disabled={loading}
-        size="sm"
-        className="w-full"
-      >
-        {loading ? "Running…" : "Run export"}
-      </Button>
-      {message && (
-        <p
-          className={`text-xs ${message.type === "ok" ? "text-muted-foreground" : "text-destructive"}`}
+
+      {/* Row 2: Horizontal timeframe selector */}
+      <TimeframeSelector
+        value={timeframe}
+        onChange={setTimeframe}
+        disabled={hudActive}
+      />
+
+      {/* Row 3: Engage button */}
+      {!hudActive && (
+        <button
+          type="button"
+          onClick={handleRun}
+          className="export-module-engage"
         >
-          {message.text}
-        </p>
+          Engage
+        </button>
       )}
+
+      {/* HUD — replaces engage when active */}
+      <ExportHud
+        active={hudActive}
+        symbol={symbol}
+        timeframe={resolvedTf}
+        last={last}
+        windowSize={windowSize}
+        allTimeframes={timeframe === "all"}
+        onComplete={handleHudComplete}
+      />
+
+      {/* Result after HUD closes */}
+      {!hudActive && lastResult && (
+        <div
+          className={`export-module-result ${lastResult.type === "ok" ? "export-module-result-ok" : "export-module-result-error"}`}
+        >
+          {lastResult.text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Compact numeric stepper ─────────────────────────────────────────── */
+
+function CompactNumericField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  disabled?: boolean;
+  onChange: (v: number) => void;
+}) {
+  const decrement = () => onChange(Math.max(min, value - step));
+  const increment = () => onChange(Math.min(max, value + step));
+
+  return (
+    <div className="export-numeric">
+      <span className="export-numeric-label">{label}</span>
+      <div className="export-numeric-controls">
+        <button
+          type="button"
+          className="export-numeric-btn"
+          onClick={decrement}
+          disabled={disabled || value <= min}
+          aria-label={`Decrease ${label}`}
+        >
+          -
+        </button>
+        <span className="export-numeric-value">{value}</span>
+        <button
+          type="button"
+          className="export-numeric-btn"
+          onClick={increment}
+          disabled={disabled || value >= max}
+          aria-label={`Increase ${label}`}
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Horizontal timeframe selector ──────────────────────────────────── */
+
+function TimeframeSelector({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [highlightStyle, setHighlightStyle] = useState<React.CSSProperties>({
+    left: 0,
+    width: 0,
+    opacity: 0,
+  });
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const activeEl = list.querySelector<HTMLElement>(
+      `[data-tf-value="${value}"]`,
+    );
+    if (!activeEl) return;
+    const listRect = list.getBoundingClientRect();
+    const aRect = activeEl.getBoundingClientRect();
+    setHighlightStyle({
+      left: aRect.left - listRect.left,
+      width: aRect.width,
+      opacity: 1,
+    });
+  }, [value]);
+
+  return (
+    <div className="export-tf-selector">
+      <span className="export-tf-title">TF</span>
+      <div className="export-tf-list" ref={listRef}>
+        <div className="export-tf-highlight" style={highlightStyle} />
+        {TIMEFRAME_OPTIONS.map((opt) => {
+          const isActive = opt.value === value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              data-tf-value={opt.value}
+              disabled={disabled}
+              onClick={() => onChange(opt.value)}
+              className={`export-tf-item ${isActive ? "export-tf-item-active" : ""}`}
+            >
+              <span className="export-tf-item-label">{opt.label}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

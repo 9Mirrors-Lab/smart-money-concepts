@@ -64,6 +64,14 @@ export interface ScoresAndWaveInput {
   wave_number?: unknown;
   trend_direction?: unknown;
   wave_phase?: unknown;
+  wave_start_time?: unknown;
+  wave_peak_time?: unknown;
+  wave_start_price?: unknown;
+  wave_peak_price?: unknown;
+  wave_travel_path?: unknown;
+  internal_iv_low?: unknown;
+  internal_iv_high?: unknown;
+  prior_wave1_slope?: unknown;
 }
 
 const KEY_FACTORS_ALIGNED = "Multi-timeframe stack aligned";
@@ -105,16 +113,57 @@ function dominantBias(
 function confidenceLevel(
   multiTfStack: number | null,
   alignmentScore: number | null,
+  waveNumber: "3" | "4" | "5" | "NONE" | null,
+  waveStartPrice: number | null,
+  waveStartTime: string | null,
+  wavePeakPrice: number | null,
+  wavePeakTime: string | null,
+  priorWave1Slope: number | null,
   c: Engine2LogicConfig
-): ConfidenceLevel {
+): { confidence: ConfidenceLevel; rulesFired: string[]; rulesBlocked: string[] } {
+  const rulesFired: string[] = [];
+  const rulesBlocked: string[] = [];
+  
+  // Module C: Box Proportionality (Slope alignment)
+  // If evaluating Wave 3, check if slope is >= prior Wave 1 slope. If not, restrict HIGH.
+  let isSlopeRestricted = false;
+  if (waveNumber === "3" && waveStartPrice != null && waveStartTime != null && wavePeakPrice != null && wavePeakTime != null && priorWave1Slope != null) {
+      // Inline simple slope calculation to avoid importing box-math into UI client code
+      const startMs = new Date(waveStartTime).getTime();
+      const endMs = new Date(wavePeakTime).getTime();
+      const duration = endMs - startMs;
+      if (duration > 60000) { // 1 min min
+          const slopeW3 = (wavePeakPrice - waveStartPrice) / duration;
+          if (slopeW3 < priorWave1Slope) {
+              isSlopeRestricted = true;
+          }
+      }
+  }
+
   if (
     (multiTfStack ?? 0) >= c.conf_high_stack &&
-    (alignmentScore ?? 0) >= c.conf_high_align
+    (alignmentScore ?? 0) >= c.conf_high_align &&
+    !isSlopeRestricted
   ) {
-    return "HIGH";
+    rulesFired.push(`multi_tf_stack ≥ ${c.conf_high_stack} and alignment_score ≥ ${c.conf_high_align} → HIGH confidence`);
+    return { confidence: "HIGH", rulesFired, rulesBlocked };
   }
-  if ((multiTfStack ?? 0) >= c.conf_medium_stack) return "MEDIUM";
-  return "LOW";
+  
+  if ((multiTfStack ?? 0) >= c.conf_high_stack && (alignmentScore ?? 0) >= c.conf_high_align && isSlopeRestricted) {
+    rulesBlocked.push(`HIGH confidence blocked by Module C: Wave 3 velocity (slope) < prior Wave 1 velocity`);
+  } else {
+    if ((multiTfStack ?? 0) < c.conf_high_stack) rulesBlocked.push(`HIGH confidence blocked by multi_tf_stack_score < ${c.conf_high_stack}`);
+    if ((alignmentScore ?? 0) < c.conf_high_align) rulesBlocked.push(`HIGH confidence blocked by alignment_score < ${c.conf_high_align}`);
+  }
+
+  if ((multiTfStack ?? 0) >= c.conf_medium_stack) {
+    rulesFired.push(`multi_tf_stack_score ≥ ${c.conf_medium_stack} → MEDIUM confidence`);
+    return { confidence: "MEDIUM", rulesFired, rulesBlocked };
+  }
+  
+  rulesBlocked.push(`MEDIUM confidence blocked by multi_tf_stack_score < ${c.conf_medium_stack}`);
+  rulesFired.push(`multi_tf_stack_score < ${c.conf_medium_stack} → LOW confidence`);
+  return { confidence: "LOW", rulesFired, rulesBlocked };
 }
 
 const ALLOWED_FACTORS = [
@@ -190,6 +239,11 @@ function buildWarnings(
   const waveNum = normalizeWaveNumber(input.wave_number);
   const divHealth = toNum(input.divergence_score);
   const vol = toNum(input.volatility_regime_score);
+  const netTravel = toNum(input.wave_start_price) != null && toNum(input.wave_peak_price) != null 
+      ? Math.abs(toNum(input.wave_peak_price)! - toNum(input.wave_start_price)!) 
+      : null;
+  const totalPath = toNum(input.wave_travel_path);
+
   const out: string[] = [];
 
   if ((divHealth ?? 1) <= c.warn_divergence_max) {
@@ -201,6 +255,15 @@ function buildWarnings(
   if (waveNum === "5" && (vol ?? 1) < c.warn_vol_wave5_min) {
     out.push("Volatility contraction during Wave 5");
   }
+
+  // Module B: Negative Space warning for Corrective Waves
+  if (waveNum === "4" && netTravel != null && totalPath != null && totalPath > 0) {
+      const efficiency = netTravel / totalPath;
+      if (efficiency > 0.50) {
+          out.push("Wave 4 exhibits high structural efficiency; lack of expected negative space warns of potential failure");
+      }
+  }
+
   return out;
 }
 
@@ -248,9 +311,15 @@ export function interpret(input: ScoresAndWaveInput, overrides?: Engine2LogicOve
     toNum(input.divergence_score),
     c
   );
-  const confidence = confidenceLevel(
+  const { confidence } = confidenceLevel(
     toNum(input.multi_tf_stack_score),
     toNum(input.alignment_score),
+    waveNum,
+    toNum(input.wave_start_price),
+    typeof input.wave_start_time === 'string' ? input.wave_start_time : null,
+    toNum(input.wave_peak_price),
+    typeof input.wave_peak_time === 'string' ? input.wave_peak_time : null,
+    toNum(input.prior_wave1_slope),
     c
   );
 
@@ -280,6 +349,14 @@ export interface BarBreakdownRawScores {
   volatility_regime_score: number | null;
   divergence_score: number | null;
   wave_number: "3" | "4" | "5" | "NONE" | null;
+  wave_start_time: string | null;
+  wave_peak_time: string | null;
+  wave_start_price: number | null;
+  wave_peak_price: number | null;
+  wave_travel_path: number | null;
+  internal_iv_low: number | null;
+  internal_iv_high: number | null;
+  prior_wave1_slope: number | null;
 }
 
 export interface BarBreakdown {
@@ -318,7 +395,17 @@ export function getBarBreakdown(input: ScoresAndWaveInput, overrides?: Engine2Lo
     divHealth,
     c
   );
-  const confidence = confidenceLevel(stack, alignmentScore, c);
+  const { confidence, rulesFired: confRulesFired, rulesBlocked: confRulesBlocked } = confidenceLevel(
+    stack, 
+    alignmentScore, 
+    waveNum,
+    toNum(input.wave_start_price),
+    typeof input.wave_start_time === 'string' ? input.wave_start_time : null,
+    toNum(input.wave_peak_price),
+    typeof input.wave_peak_time === 'string' ? input.wave_peak_time : null,
+    toNum(input.prior_wave1_slope),
+    c
+  );
 
   const rawScores: BarBreakdownRawScores = {
     alignment_score: toNum(input.alignment_score),
@@ -329,6 +416,14 @@ export function getBarBreakdown(input: ScoresAndWaveInput, overrides?: Engine2Lo
     volatility_regime_score: vol,
     divergence_score: divHealth,
     wave_number: waveNum,
+    wave_start_time: typeof input.wave_start_time === 'string' ? input.wave_start_time : null,
+    wave_peak_time: typeof input.wave_peak_time === 'string' ? input.wave_peak_time : null,
+    wave_start_price: toNum(input.wave_start_price),
+    wave_peak_price: toNum(input.wave_peak_price),
+    wave_travel_path: toNum(input.wave_travel_path),
+    internal_iv_low: toNum(input.internal_iv_low),
+    internal_iv_high: toNum(input.internal_iv_high),
+    prior_wave1_slope: toNum(input.prior_wave1_slope),
   };
 
   const rulesFired: string[] = [];
@@ -337,11 +432,7 @@ export function getBarBreakdown(input: ScoresAndWaveInput, overrides?: Engine2Lo
   else if (alignmentScore >= c.alignment_weak) rulesFired.push(`alignment_score ≥ ${c.alignment_weak} → WEAK`);
   else rulesFired.push(`alignment_score < ${c.alignment_weak} → DISALIGNED`);
 
-  if ((stack ?? 0) >= c.conf_high_stack && (alignmentScore ?? 0) >= c.conf_high_align)
-    rulesFired.push(`multi_tf_stack ≥ ${c.conf_high_stack} and alignment_score ≥ ${c.conf_high_align} → HIGH confidence`);
-  else if ((stack ?? 0) >= c.conf_medium_stack) rulesFired.push(`multi_tf_stack_score ≥ ${c.conf_medium_stack} → MEDIUM confidence`);
-  else rulesFired.push(`multi_tf_stack_score < ${c.conf_medium_stack} → LOW confidence`);
-
+  rulesFired.push(...confRulesFired);
   if ((stack ?? 0) >= c.stack_aligned)
     rulesFired.push(`multi_tf_stack_score ≥ ${c.stack_aligned} → stack_aligned`);
 
@@ -364,16 +455,9 @@ export function getBarBreakdown(input: ScoresAndWaveInput, overrides?: Engine2Lo
     if (alignmentScore < c.alignment_strong)
       rulesBlocked.push(`STRONG alignment blocked by alignment_score < ${c.alignment_strong}`);
   }
-  if (confidence !== "HIGH") {
-    if ((stack ?? 0) < c.conf_high_stack)
-      rulesBlocked.push(`HIGH confidence blocked by multi_tf_stack_score < ${c.conf_high_stack}`);
-    if ((alignmentScore ?? 0) < c.conf_high_align)
-      rulesBlocked.push(`HIGH confidence blocked by alignment_score < ${c.conf_high_align}`);
-  }
-  if (confidence === "LOW") {
-    if ((stack ?? 0) < c.conf_medium_stack)
-      rulesBlocked.push(`MEDIUM confidence blocked by multi_tf_stack_score < ${c.conf_medium_stack}`);
-  }
+  
+  rulesBlocked.push(...confRulesBlocked);
+
   if (bias !== "CONTINUATION") {
     if ((wave3Prob ?? 0) < c.bias_cont_wave3)
       rulesBlocked.push(`CONTINUATION blocked by wave3_probability < ${c.bias_cont_wave3}`);

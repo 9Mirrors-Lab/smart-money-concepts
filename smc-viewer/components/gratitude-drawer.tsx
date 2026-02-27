@@ -8,6 +8,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
+import { DottedGlowBackground } from "@/components/ui/dotted-glow-background";
 import { X, Heart, Circle, ChevronDown, ChevronRight } from "lucide-react";
 
 export type GratitudeEntry = {
@@ -129,17 +130,16 @@ export function GratitudeDrawer({ open, onOpenChange, trigger }: GratitudeDrawer
       {trigger}
       <Drawer
         direction="right"
-        modal={false}
         open={open}
         onOpenChange={onOpenChange}
       >
         <DrawerContent
           direction="right"
-          showOverlay={false}
-          className="gratitude-drawer inset-y-0 left-auto right-0 top-0 h-full max-h-full w-[min(380px,92vw)] rounded-l-xl border-l border-[var(--gratitude-border)] bg-[var(--gratitude-bg)] shadow-[-8px_0_32px_0_rgba(0,0,0,0.4)]"
+          showOverlay
+          className="gratitude-drawer gratitude-drawer-bg inset-y-0 left-auto right-0 top-0 h-full max-h-full w-[min(380px,92vw)] rounded-l-xl shadow-[-8px_0_32px_0_rgba(0,0,0,0.4)]"
         >
           <DrawerTitle className="sr-only">Gratitude</DrawerTitle>
-          <div className="flex h-full flex-col overflow-hidden">
+          <div className="relative flex h-full flex-col overflow-hidden">
             <div className="gratitude-header flex shrink-0 items-center justify-between border-b border-[var(--gratitude-border)] px-3 py-2">
               <span className="gratitude-title text-[10px] font-semibold uppercase tracking-widest text-[var(--gratitude-muted)]">
                 Gratitude
@@ -205,35 +205,38 @@ export function GratitudeDrawer({ open, onOpenChange, trigger }: GratitudeDrawer
                     <Circle className="size-3.5 text-[var(--gratitude-node)]" aria-hidden />
                   </button>
                 </div>
-                {streamView === "chain" ? (
-                  <GratitudeStream
-                    entries={entries}
-                    lastAddedId={lastAddedId}
-                    selectedId={selectedStreamId}
-                    onSelect={(id) => {
-                      setSelectedStreamId(id);
-                      listRef.current?.querySelector(`[data-gratitude-id="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                    }}
-                  />
-                ) : (
-                  <GratitudeSeedOfLife
-                    entries={entries}
-                    lastAddedId={lastAddedId}
-                    selectedId={selectedStreamId}
-                    onSelect={(id) => {
-                      setSelectedStreamId(id);
-                      listRef.current?.querySelector(`[data-gratitude-id="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                    }}
-                  />
-                )}
+                <div className="ml-5">
+                  {streamView === "chain" ? (
+                    <GratitudeStream
+                      entries={entries}
+                      lastAddedId={lastAddedId}
+                      selectedId={selectedStreamId}
+                      onSelect={(id) => {
+                        setSelectedStreamId(id);
+                        listRef.current?.querySelector(`[data-gratitude-id="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                      }}
+                    />
+                  ) : (
+                    <GratitudeSeedOfLife
+                      entries={entries}
+                      lastAddedId={lastAddedId}
+                      selectedId={selectedStreamId}
+                      onSelect={(id) => {
+                        setSelectedStreamId(id);
+                        listRef.current?.querySelector(`[data-gratitude-id="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                      }}
+                    />
+                  )}
+                </div>
               </div>
             )}
 
-            <div
-              ref={listRef}
-              className="gratitude-list flex-1 overflow-y-auto overflow-x-hidden p-2"
-            >
-              {loading ? (
+            <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div
+                ref={listRef}
+                className="gratitude-list flex-1 overflow-y-auto overflow-x-hidden px-4 py-2"
+              >
+                {loading ? (
                 <p className="py-4 text-center text-[10px] text-[var(--gratitude-muted)]">
                   Loading…
                 </p>
@@ -289,6 +292,27 @@ export function GratitudeDrawer({ open, onOpenChange, trigger }: GratitudeDrawer
                   })}
                 </ul>
               )}
+              </div>
+              {/* Bottom area: dotted glow (same treatment as main nav drawer) */}
+              <div
+                className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-[520px] overflow-hidden"
+                aria-hidden
+              >
+                <DottedGlowBackground
+                  className="gratitude-glow-fade"
+                  opacity={0.8}
+                  gap={5}
+                  radius={1.0}
+                  colorLightVar="--color-neutral-100"
+                  glowColorLightVar="--color-neutral-700"
+                  colorDarkVar="--color-neutral-600"
+                  glowColorDarkVar="--color-sky-900"
+                  backgroundOpacity={0}
+                  speedMin={0.05}
+                  speedMax={0.3}
+                  speedScale={0.25}
+                />
+              </div>
             </div>
           </div>
         </DrawerContent>
@@ -544,7 +568,7 @@ export function GratitudeRibbon({
       onClick={() => onOpenChange(!open)}
       title="Gratitude"
       aria-label="Open gratitude"
-      className="gratitude-ribbon nav-tab-trigger nav-tab-trigger-right flex h-10 shrink-0 items-center justify-center rounded-l-md rounded-r-none border border-r-0 p-0"
+      className="gratitude-ribbon nav-tab-trigger nav-tab-trigger-right-full flex h-10 w-10 shrink-0 items-center justify-center rounded-l-md rounded-r-none border border-r-0 p-0"
     >
       <Heart className="size-4 shrink-0" aria-hidden />
     </Button>
